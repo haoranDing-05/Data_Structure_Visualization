@@ -5,6 +5,9 @@ from PyQt5.QtCore import Qt,QUrl
 from PyQt5.QtGui import QFont, QPixmap, QPalette, QBrush
 from PyQt5.QtMultimedia import QSoundEffect  # 用于音效播放
 
+from LinearList import SequenceList
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -16,7 +19,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("主界面")  # 可修改窗口标题
         self.setGeometry(100, 100, 640, 852)  # 增大窗口尺寸
 
-        # 创建带背景的中心部件（修改1：使用QFrame并添加背景）
+        # 创建带背景的中心部件
         central_frame = QFrame()
         self.setCentralWidget(central_frame)
         self.set_background_image(central_frame, "C:/Users/dhrnb/Desktop/DataStructureVisualization/微信图片_20250922183759_13_117.jpg")  # 替换为你的背景图片路径
@@ -31,24 +34,23 @@ class MainWindow(QMainWindow):
         title_font.setBold(True)  # 标题加粗
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)  # 标题居中
-        title_label.setMargin(40)  # 增大标题边距（修改3）
-        # 添加标题样式，使其在背景上更清晰（修改4）
+        title_label.setMargin(40)  # 增大标题边距
         title_label.setStyleSheet("color: blue; text-shadow: 2px 2px 4px #000000;")
         main_layout.addWidget(title_label)
 
-        # 添加伸缩项，使按钮位置更合理（修改5）
+        # 添加伸缩项，使按钮位置更合理
         main_layout.addStretch()
 
         # 添加按钮布局（水平布局）
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(50)  # 增大按钮间距（修改6）
+        button_layout.setSpacing(50)  # 增大按钮间距
         button_layout.setAlignment(Qt.AlignCenter)  # 按钮居中
 
         # 创建第一个按钮
         self.button1 = QPushButton("线性结构")  # 保留你的按钮文本
-        self.button1.setMinimumSize(150, 60)  # 增大按钮大小（修改7）
-        self.button1.setFont(QFont("SimHei", 12))  # 设置按钮字体（修改8）
-        # 美化按钮样式（修改9）
+        self.button1.setMinimumSize(150, 60)  # 增大按钮大小
+        self.button1.setFont(QFont("SimHei", 12))  # 设置按钮字体
+        # 美化按钮样式
         self.button1.setStyleSheet("""
             QPushButton {
                 background-color: rgba(60, 130, 255, 0.8);
@@ -106,9 +108,14 @@ class MainWindow(QMainWindow):
     def on_button1_clicked(self):
         """第一个按钮点击事件处理"""
         print("button1 is clicked")
-        self.play_click_sound()  # 播放音效
-        # 这里可以添加线性结构界面的逻辑
-        #QMessageBox.information(self, "提示", "您点击了线性结构按钮")
+        self.play_click_sound()  # 播放按钮点击音效
+        self.go_to_sequential()
+        print(1)
+
+    def go_to_sequential(self):
+        self.sequential_window = SequentialStructureWindow(self)  # 传入self
+        self.sequential_window.show()
+        self.hide()
 
     def on_button2_clicked(self):
         """第二个按钮点击事件处理"""
@@ -133,6 +140,122 @@ class MainWindow(QMainWindow):
         palette.setBrush(QPalette.Window, QBrush(scaled_pixmap))
         widget.setPalette(palette)
         widget.setAutoFillBackground(True)
+
+
+class SequentialStructureWindow(QMainWindow):
+    def __init__(self,mainwindow):
+        super().__init__()   #调用其父类（QMainWindow）的构造方法
+
+        self.mainwindow=mainwindow
+
+        self.init_sound_effects()   #初始化音效
+
+        #设置窗口的标题和窗口的大小
+        self.setWindowTitle("顺序结构可视化")
+        self.setGeometry(100,100,640,852)
+
+        #添加带背景图片的中心组件
+        central_frame=QFrame()     #创建组件
+        self.setCentralWidget(central_frame)
+        self.set_background_image(central_frame,"C:/Users/dhrnb/Desktop/DataStructureVisualization/微信图片_20250922183759_13_117.jpg")
+
+
+        main_layout=QVBoxLayout(central_frame)
+
+        #添加标题 标签
+        title_label=QLabel("顺序结构")
+        title_font=QFont()
+        title_font.setPointSize(15)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setMargin(40)
+        # 添加标题样式
+        title_label.setStyleSheet("color: blue; text-shadow: 2px 2px 4px #000000;")
+        main_layout.addWidget(title_label)
+
+        # 添加伸缩项，使按钮位置更合理
+        main_layout.addStretch()
+
+        # 添加按钮布局（水平布局）
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(50)  # 增大按钮间距
+        button_layout.setAlignment(Qt.AlignCenter)  # 按钮居中
+
+
+        #创建返回按钮
+        self.button_return=QPushButton("返回主界面")
+        self.button_return.setMinimumSize(150,60)
+        self.button_return.setFont(QFont("SimHei", 12))
+        self.button_return.setStyleSheet("""
+                    QPushButton {
+                        background-color: rgba(60, 130, 255, 0.8);
+                        color: white;
+                        border-radius: 10px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background-color: rgba(60, 130, 255, 1.0);
+                        transform: scale(1.05);
+                    }
+                """)
+        self.button_return.clicked.connect(self.on_button_return_clicked)
+        button_layout.addWidget(self.button_return)
+
+        # 将按钮布局添加到主布局
+        main_layout.addLayout(button_layout)
+
+        # 添加底部间距（修改13）
+        main_layout.addSpacing(80)
+
+    def on_button_return_clicked(self):
+        """返回按钮点击事件处理"""
+        print("button_return is clicked")
+        self.play_click_sound()
+        print(3)
+        self.back_to_main()
+        print(2)
+
+    def back_to_main(self):
+        self.mainwindow.show()  # 显示原主窗口
+        self.close()  # 关闭子窗口
+
+
+
+    def init_sound_effects(self):
+        self.click_sound=QSoundEffect()
+        self.click_sound.setSource(QUrl.fromLocalFile("C:/Users/dhrnb/Desktop/DataStructureVisualization/button_click.wav"))
+        self.click_sound.setVolume(0.7)  # 设置音量（0.0-1.0）
+
+    def play_click_sound(self):
+        """播放点击音效"""
+        if not self.click_sound.source().isEmpty():
+            self.click_sound.play()
+        else:
+            # 如果音效文件未设置，显示提示
+            QMessageBox.warning(self, "提示", "未设置点击音效文件")
+
+
+    def set_background_image(self,widget,image_path):
+        palette=QPalette()
+        pixmap=QPixmap(image_path)    #将路径中的图片以像素形式存储在变量pixmap中
+        print(type(pixmap))
+
+        #缩放图片以适应窗口大小
+        scaled_pixmap=pixmap.scaled(
+            widget.size(),
+            Qt.KeepAspectRatioByExpanding,
+            Qt.SmoothTransformation
+        )
+
+        palette.setBrush(QPalette.Window, QBrush(scaled_pixmap))
+        widget.setPalette(palette)
+        widget.setAutoFillBackground(True)
+
+
+
+
+
 
 
 if __name__ == "__main__":
