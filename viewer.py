@@ -9,7 +9,7 @@ import traceback
 
 from model import SequenceList
 
-from visualization import StackVisualizer,VisualArea
+from visualization import StackVisualizer
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -251,11 +251,10 @@ class SequentialStructureWindow(QMainWindow):
     def go_to_stack(self):
         try:
 
-            self.stack_window = StackVisualizer()
+            self.stack_window = StackVisualizer(self.mainwindow)
             self.stack_window.show()
             self.hide()
             print("栈可视化工具启动成功")
-
 
         except Exception as e:
             print(f"应用程序错误: {e}")
