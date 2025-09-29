@@ -5,8 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="98bba44a-b0ad-4617-b858-8e8844be300a" name="更改" comment="1">
+      <change afterPath="$PROJECT_DIR$/visualization.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/homepage.py" beforeDir="false" afterPath="$PROJECT_DIR$/homepage.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LinearList.py" beforeDir="false" afterPath="$PROJECT_DIR$/model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/homepage.py" beforeDir="false" afterPath="$PROJECT_DIR$/viewer.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -53,8 +55,11 @@
     "Python.LinearList.executor": "Run",
     "Python.home_page.executor": "Run",
     "Python.homepage.executor": "Run",
+    "Python.viewer.executor": "Run",
+    "Python.visualization.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "git-widget-placeholder": "new",
+    "last_opened_file_path": "C:/pycharm/Pycharm Project/Data_Structure_Visualization",
     "settings.editor.selected.configurable": "preferences.lookFeel"
   }
 }]]></component>
