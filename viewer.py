@@ -5,8 +5,11 @@ from PyQt5.QtCore import Qt,QUrl
 from PyQt5.QtGui import QFont, QPixmap, QPalette, QBrush
 from PyQt5.QtMultimedia import QSoundEffect  # 用于音效播放
 
-from LinearList import SequenceList
+import traceback
 
+from model import SequenceList
+
+from visualization import StackVisualizer,VisualArea
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -202,25 +205,62 @@ class SequentialStructureWindow(QMainWindow):
         self.button_return.clicked.connect(self.on_button_return_clicked)
         button_layout.addWidget(self.button_return)
 
+
+
+        self.button_stack=QPushButton("栈")
+        self.button_stack.setMinimumSize(150, 60)
+        self.button_stack.setFont(QFont("SimHei", 12))
+        self.button_stack.setStyleSheet("""
+                    QPushButton {
+                        background-color: rgba(60, 130, 255, 0.8);
+                        color: white;
+                        border-radius: 10px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background-color: rgba(60, 130, 255, 1.0);
+                        transform: scale(1.05);
+                    }
+                """)
+        self.button_stack.clicked.connect(self.on_button_stack_clicked)
+        button_layout.addWidget(self.button_stack)
+
         # 将按钮布局添加到主布局
         main_layout.addLayout(button_layout)
 
-        # 添加底部间距（修改13）
+        # 添加底部间距
         main_layout.addSpacing(80)
+
 
     def on_button_return_clicked(self):
         """返回按钮点击事件处理"""
         print("button_return is clicked")
         self.play_click_sound()
-        print(3)
         self.back_to_main()
-        print(2)
+
+    def on_button_stack_clicked(self):
+        """栈可视化按钮点击事件处理"""
+        self.play_click_sound()
+        self.go_to_stack()
+
 
     def back_to_main(self):
         self.mainwindow.show()  # 显示原主窗口
         self.close()  # 关闭子窗口
 
+    def go_to_stack(self):
+        try:
 
+            self.stack_window = StackVisualizer()
+            self.stack_window.show()
+            self.hide()
+            print("栈可视化工具启动成功")
+
+
+        except Exception as e:
+            print(f"应用程序错误: {e}")
+            traceback.print_exc()
+            QMessageBox.critical(self, "错误", f"打开栈可视化工具时出错: {e}")
 
     def init_sound_effects(self):
         self.click_sound=QSoundEffect()
@@ -234,7 +274,6 @@ class SequentialStructureWindow(QMainWindow):
         else:
             # 如果音效文件未设置，显示提示
             QMessageBox.warning(self, "提示", "未设置点击音效文件")
-
 
     def set_background_image(self,widget,image_path):
         palette=QPalette()
