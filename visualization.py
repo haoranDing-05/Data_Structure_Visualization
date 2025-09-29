@@ -2,16 +2,17 @@ import sys
 import traceback
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox)
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer,QUrl
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QBrush
+from PyQt5.QtMultimedia import QSoundEffect  # 用于音效播放
 from model import Stack
 
-class VisualArea(QWidget):
-    """专门用于绘图的组件"""
 
+class VisualArea_stack(QWidget):
+    """专门用于绘图的组件"""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(1000)
+        self.setMinimumHeight(500)
         self.setStyleSheet("background-color: #f5f5f5; border: 1px solid #ddd;")
         self.stack = None  # 直接存储stack引用
         self.cell_width = 120
@@ -130,8 +131,11 @@ class VisualArea(QWidget):
 
 
 class StackVisualizer(QWidget):
-    def __init__(self):
+    def __init__(self, main_window=None):
         super().__init__()
+
+        # 保存主窗口引用
+        self.main_window = main_window
 
         # 初始化栈
         self.stack = Stack()
@@ -149,6 +153,22 @@ class StackVisualizer(QWidget):
         self.highlighted_index = -1
 
         self.init_ui()
+        self.init_sound_effects()
+
+
+    def init_sound_effects(self):
+        self.click_sound=QSoundEffect()
+        self.click_sound.setSource(QUrl.fromLocalFile("C:/Users/dhrnb/Desktop/DataStructureVisualization/button_click.wav"))
+        self.click_sound.setVolume(0.7)  # 设置音量（0.0-1.0）
+
+    def play_click_sound(self):
+        """播放点击音效"""
+        if not self.click_sound.source().isEmpty():
+            self.click_sound.play()
+        else:
+            # 如果音效文件未设置，显示提示
+            QMessageBox.warning(self, "提示", "未设置点击音效文件")
+
 
     def init_ui(self):
         # 主布局
@@ -200,6 +220,26 @@ class StackVisualizer(QWidget):
         button_layout.addWidget(self.clear_btn)
         button_layout.addStretch()
 
+        # 返回按钮布局
+        button_return_layout = QHBoxLayout()
+        self.button_return_main = QPushButton("返回主界面")  # 修复：移除self.
+        self.button_return_main.setMinimumSize(150, 40)  # 修复：设置正确的大小
+        self.button_return_main.setFont(QFont("SimHei", 10))
+        self.button_return_main.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(60, 130, 255, 0.8);
+                color: white;
+                border-radius: 10px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: rgba(60, 130, 255, 1.0);
+            }
+        """)
+        self.button_return_main.clicked.connect(self.on_button_return_main_clicked)
+        button_return_layout.addWidget(self.button_return_main)
+        button_return_layout.addStretch()
+
         # 速度控制
         speed_layout = QHBoxLayout()
         speed_layout.addWidget(QLabel("动画速度:"))
@@ -214,6 +254,7 @@ class StackVisualizer(QWidget):
 
         control_layout.addLayout(input_layout)
         control_layout.addLayout(button_layout)
+        control_layout.addLayout(button_return_layout)  # 添加返回按钮布局
         control_layout.addLayout(speed_layout)
         control_group.setLayout(control_layout)
         main_layout.addWidget(control_group)
@@ -221,8 +262,7 @@ class StackVisualizer(QWidget):
         # 可视化区域
         visual_group = QGroupBox("栈可视化")
         visual_layout = QVBoxLayout()
-        self.visual_area = VisualArea(self)
-        # 关键修改：将stack传递给可视化区域
+        self.visual_area = VisualArea_stack(self)
         self.visual_area.set_stack(self.stack)
         visual_layout.addWidget(self.visual_area)
         visual_group.setLayout(visual_layout)
@@ -248,6 +288,17 @@ class StackVisualizer(QWidget):
 
         # 初始更新
         self.update_display()
+
+    def on_button_return_main_clicked(self):
+        """返回主界面按钮点击事件"""
+        self.play_click_sound()
+        self.back_to_main()
+
+    def back_to_main(self):
+        """返回主界面"""
+        if self.main_window:
+            self.main_window.show()  # 显示主窗口
+        self.close()  # 关闭当前窗口
 
     def update_display(self):
         """更新显示"""
@@ -285,6 +336,7 @@ class StackVisualizer(QWidget):
             self.status_label.setText(f"栈状态: {self.stack.length()} 个元素, 栈顶: {self.stack.peek()}")
 
     def handle_push(self):
+        self.play_click_sound()
         if self.animating:
             return
 
@@ -315,6 +367,7 @@ class StackVisualizer(QWidget):
         QTimer.singleShot(self.animation_speed, self.execute_operation)
 
     def handle_pop(self):
+        self.play_click_sound()
         if self.animating:
             return
 
@@ -335,6 +388,7 @@ class StackVisualizer(QWidget):
         QTimer.singleShot(self.animation_speed, self.execute_operation)
 
     def handle_peek(self):
+        self.play_click_sound()
         if self.stack.is_empty():
             QMessageBox.information(self, "栈顶元素", "栈为空，没有元素")
             return
@@ -349,6 +403,7 @@ class StackVisualizer(QWidget):
         QTimer.singleShot(2000, self.clear_highlight)
 
     def handle_clear(self):
+        self.play_click_sound()
         if self.stack.is_empty():
             QMessageBox.information(self, "提示", "栈已经是空的")
             return
