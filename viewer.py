@@ -9,7 +9,7 @@ import traceback
 
 from model import SequenceList
 
-from visualization import StackVisualizer, SequenceListVisualizer
+from visualization import StackVisualizer, SequenceListVisualizer, LinkedListVisualizer
 
 
 class MainWindow(QMainWindow):
@@ -181,11 +181,15 @@ class SequentialStructureWindow(QMainWindow):
         # 添加伸缩项，使按钮位置更合理
         main_layout.addStretch()
 
-        # 添加按钮布局（水平布局）
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(50)  # 增大按钮间距
-        button_layout.setAlignment(Qt.AlignCenter)  # 按钮居中
+        # 添加功能按钮布局
+        button_layout1 = QHBoxLayout()  #水平布局
+        button_layout1.setSpacing(50)  # 增大按钮间距
+        button_layout1.setAlignment(Qt.AlignCenter)  # 按钮居中
 
+        #添加
+        button_layout2=QHBoxLayout()  #水平布局
+        button_layout2.setSpacing(50)
+        button_layout2.setAlignment(Qt.AlignCenter)  # 按钮居中
 
         #创建返回按钮
         self.button_return=QPushButton("返回主界面")
@@ -204,7 +208,7 @@ class SequentialStructureWindow(QMainWindow):
                     }
                 """)
         self.button_return.clicked.connect(self.on_button_return_clicked)
-        button_layout.addWidget(self.button_return)
+        button_layout2.addWidget(self.button_return)
 
 
 
@@ -224,7 +228,7 @@ class SequentialStructureWindow(QMainWindow):
                     }
                 """)
         self.button_stack.clicked.connect(self.on_button_stack_clicked)
-        button_layout.addWidget(self.button_stack)
+        button_layout1.addWidget(self.button_stack)
 
 
 
@@ -244,16 +248,30 @@ class SequentialStructureWindow(QMainWindow):
                             }
                         """)
         self.button_sequencelist.clicked.connect(self.on_button_sequencelist_clicked)
-        button_layout.addWidget(self.button_sequencelist)
+        button_layout1.addWidget(self.button_sequencelist)
+
+        self.button_linkedlist = QPushButton("链表")
+        self.button_linkedlist.setMinimumSize(150, 60)
+        self.button_linkedlist.setFont(QFont("SimHei", 12))
+        self.button_linkedlist.setStyleSheet("""
+                                    QPushButton {
+                                        background-color: rgba(60, 130, 255, 0.8);
+                                        color: white;
+                                        border-radius: 10px;
+                                        border: none;
+                                    }
+                                    QPushButton:hover {
+                                        background-color: rgba(60, 130, 255, 1.0);
+                                        transform: scale(1.05);
+                                    }
+                                """)
+        self.button_linkedlist.clicked.connect(self.on_button_linkedlist_clicked)
+        button_layout1.addWidget(self.button_linkedlist)
+
 
         # 将按钮布局添加到主布局
-        main_layout.addLayout(button_layout)
-
-
-
-
-
-
+        main_layout.addLayout(button_layout1)
+        main_layout.addLayout(button_layout2)
 
         # 添加底部间距
         main_layout.addSpacing(80)
@@ -274,6 +292,11 @@ class SequentialStructureWindow(QMainWindow):
         """顺序表可视化按钮点击事件处理"""
         self.play_click_sound()
         self.go_to_sequencelist()
+
+    def on_button_linkedlist_clicked(self):
+        """链表可视化按钮点击事件处理"""
+        self.play_click_sound()
+        self.go_to_linkedlist()
 
 
     def back_to_main(self):
@@ -303,6 +326,17 @@ class SequentialStructureWindow(QMainWindow):
             print(f"应用程序错误:{e}")
             traceback.print_exc()
             QMessageBox.critical(self,"错误",f"打开顺序表可视化工具时出错:{e}")
+
+    def go_to_linkedlist(self):
+        try:
+            self.linkedlist_window=LinkedListVisualizer(self.mainwindow)
+            self.linkedlist_window.show()
+            self.hide()
+            print("链表可视化工具启动成功")
+        except Exception as e:
+            print(f"应用程序错误:{e}")
+            traceback.print_exc()
+            QMessageBox.critical(self,"错误",f"打开链表可视化工具时出错:{e}")
 
 
     def init_sound_effects(self):

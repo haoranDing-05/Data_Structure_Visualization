@@ -1,9 +1,10 @@
 import sys
 import traceback
+import math
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox)
-from PyQt5.QtCore import Qt, QTimer, QUrl
-from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QBrush
+from PyQt5.QtCore import Qt, QTimer, QUrl,QPointF
+from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QBrush,QPolygonF
 from PyQt5.QtMultimedia import QSoundEffect
 from model import Stack, SequenceList, LinkedList
 
@@ -50,8 +51,10 @@ class VisualArea(QWidget):
                 return
 
             # 根据数据结构类型选择绘制方法
-            if isinstance(self.data_structure, (Stack, SequenceList, LinkedList)):
+            if isinstance(self.data_structure, (Stack, SequenceList)):
                 self._draw_linear_structure(painter)
+            elif isinstance(self.data_structure, LinkedList):
+                self._draw_linked_list(painter)
             else:
                 painter.drawText(self.rect(), Qt.AlignCenter, "不支持的结构类型")
 
@@ -60,7 +63,7 @@ class VisualArea(QWidget):
             traceback.print_exc()
 
     def _draw_linear_structure(self, painter):
-        """绘制线性结构（栈/顺序表/链表）- 修改为横向显示"""
+        """绘制线性结构（栈/顺序表/链表）"""
         ds = self.data_structure
         length = ds.length()
         if length == 0:
@@ -69,14 +72,14 @@ class VisualArea(QWidget):
             painter.drawText(self.rect(), Qt.AlignCenter, "空结构")
             return
 
-        # 计算起始位置（改为横向居中）
+        # 计算起始位置
         area_width = self.width()
         area_height = self.height()
         total_width = length * self.cell_width + (length - 1) * self.cell_spacing
         start_x = max(10, (area_width - total_width) // 2)  # 水平居中
         start_y = (area_height - self.cell_height) // 2  # 垂直居中
 
-        # 判断是否为栈（栈保持纵向，其他线性结构横向）
+        # 判断是否为栈
         is_stack = isinstance(ds, Stack)
 
         # 绘制元素
@@ -91,14 +94,14 @@ class VisualArea(QWidget):
                 y_pos = start_y
 
             # 超出边界处理
-            if is_stack:
+            if is_stack:    #栈的超出边界处理
                 if y_pos < 20:
                     painter.setPen(QPen(QColor(255, 0, 0), 1))
                     painter.setFont(QFont("Arial", 8))
                     painter.drawText(start_x, 10, self.cell_width, 15,
                                      Qt.AlignCenter, f"...还有{length - i}个元素未显示")
                     break
-            else:
+            else:           #顺序表和链表的超出边界处理
                 if x_pos + self.cell_width > area_width - 10:
                     painter.setPen(QPen(QColor(255, 0, 0), 1))
                     painter.setFont(QFont("Arial", 8))
@@ -116,6 +119,7 @@ class VisualArea(QWidget):
             # 绘制矩形框
             painter.setPen(QPen(QColor(0, 0, 0), 2))
             painter.drawRect(x_pos, y_pos, self.cell_width, self.cell_height)
+
 
             # 绘制元素值
             painter.setPen(QPen(QColor(0, 0, 0), 1))
@@ -135,7 +139,7 @@ class VisualArea(QWidget):
         painter.setFont(QFont("Arial", 9))
 
         if is_stack:
-            # 栈保持原有标记
+            # 栈的可视化绘制组件
             if length > 0:
                 top_index = min(length - 1,
                                 (start_y - 20) // (self.cell_height + self.cell_spacing))
@@ -149,7 +153,7 @@ class VisualArea(QWidget):
 
             painter.drawText(10, 10, 200, 20, Qt.AlignLeft, f"栈大小: {length}")
         else:
-            # 横向线性表的首尾标记
+            # 顺序表的可视化绘制组件
             painter.drawText(start_x - 30, start_y + self.cell_height // 2,
                              25, 20, Qt.AlignCenter, "头")
             last_x = start_x + (length - 1) * (self.cell_width + self.cell_spacing)
@@ -158,6 +162,123 @@ class VisualArea(QWidget):
 
             # 显示线性表长度
             painter.drawText(10, 10, 200, 20, Qt.AlignLeft, f"长度: {length} 个元素")
+
+    def drawArrow(self, painter, start_x, start_y, end_x, end_y):
+        """绘制从起点到终点的带箭头的线"""
+
+        # 设置线条样式
+        pen = QPen(Qt.blue, 2)
+        painter.setPen(pen)
+
+        # 绘制主线
+        painter.drawLine(start_x, start_y, end_x, end_y)
+
+        # 计算箭头角度
+        import math
+        angle = math.atan2(end_y - start_y, end_x - start_x) * 180 / math.pi
+
+        # 设置箭头大小
+        arrow_size = 10
+
+        # 计算箭头两个点的位置
+        arrow_p1 = QPointF(
+            end_x - arrow_size * math.cos(math.radians(angle + 30)),
+            end_y - arrow_size * math.sin(math.radians(angle + 30))
+        )
+        arrow_p2 = QPointF(
+            end_x - arrow_size * math.cos(math.radians(angle - 30)),
+            end_y - arrow_size * math.sin(math.radians(angle - 30))
+        )
+
+        # 绘制箭头
+        painter.setBrush(QBrush(Qt.blue))
+        arrow_head = QPolygonF()
+        arrow_head.append(QPointF(end_x, end_y))
+        arrow_head.append(arrow_p1)
+        arrow_head.append(arrow_p2)
+        painter.drawPolygon(arrow_head)
+
+    def _draw_linked_list(self, painter):
+        """绘制链表结构，每个节点为矩形，节点间用箭头连接"""
+        ll = self.data_structure
+        length = ll.length()
+        if length == 0:
+            painter.setFont(QFont("Arial", 12, QFont.Italic))
+            painter.setPen(QColor(150, 150, 150))
+            painter.drawText(self.rect(), Qt.AlignCenter, "空链表")
+            return
+
+        # 计算起始位置
+        area_width = self.width()
+        area_height = self.height()
+        total_width = length * self.cell_width + (length - 1) * (self.cell_spacing + 30)  # 额外留箭头空间
+        start_x = max(10, (area_width - total_width) // 2)  # 水平居中
+        start_y = (area_height - self.cell_height) // 2  # 垂直居中
+
+        # 绘制每个节点
+        node_positions = []  # 存储每个节点的位置，用于绘制箭头
+        for i in range(length):
+            x_pos = start_x + i * (self.cell_width + self.cell_spacing + 30)
+            y_pos = start_y
+
+            # 超出边界处理
+            if x_pos + self.cell_width > area_width - 10:
+                painter.setPen(QPen(QColor(255, 0, 0), 1))
+                painter.setFont(QFont("Arial", 8))
+                painter.drawText(area_width - 150, start_y + self.cell_height + 20,
+                                 140, 15, Qt.AlignRight,
+                                 f"...还有{length - i}个节点未显示")
+                break
+
+            # 保存节点位置
+            node_positions.append((x_pos, y_pos))
+
+            # 设置颜色
+            if i == self.highlighted_index:
+                painter.setBrush(QBrush(QColor(255, 215, 0)))  # 高亮色
+            else:
+                painter.setBrush(QBrush(QColor(200, 230, 255)))  # 正常色
+
+            # 绘制节点矩形
+            painter.setPen(QPen(QColor(0, 0, 0), 2))
+            painter.drawRect(x_pos, y_pos, self.cell_width, self.cell_height)
+
+            # 绘制节点值
+            painter.setPen(QPen(QColor(0, 0, 0), 1))
+            painter.setFont(QFont("Arial", 10, QFont.Bold))
+            try:
+                value = str(ll[i])
+                if len(value) > 15:
+                    value = value[:15] + "..."
+                painter.drawText(x_pos, y_pos, self.cell_width, self.cell_height,
+                                 Qt.AlignCenter, value)
+            except (IndexError, TypeError) as e:
+                print(f"绘制元素错误: {e}")
+                break
+
+        # 绘制节点间的箭头
+        for i in range(len(node_positions) - 1):
+            x1, y1 = node_positions[i]
+            x2, y2 = node_positions[i + 1]
+
+            # 箭头从当前节点右侧中间指向下一节点左侧中间
+            start_arrow_x = x1 + self.cell_width
+            start_arrow_y = y1 + self.cell_height // 2
+            end_arrow_x = x2
+            end_arrow_y = y2 + self.cell_height // 2
+
+            self.drawArrow(painter, start_arrow_x, start_arrow_y, end_arrow_x, end_arrow_y)
+
+        # 绘制头节点标识
+        if node_positions:
+            first_x, first_y = node_positions[0]
+            painter.drawText(first_x, first_y - 20, self.cell_width, 20,
+                             Qt.AlignCenter, "头节点 (Head)")
+
+        # 绘制链表长度
+        painter.setPen(QPen(QColor(100, 100, 100), 1))
+        painter.setFont(QFont("Arial", 9))
+        painter.drawText(10, 10, 200, 20, Qt.AlignLeft, f"链表长度: {length} 个节点")
 
 
 class BaseVisualizer(QWidget):
@@ -881,6 +1002,455 @@ class SequenceListVisualizer(BaseVisualizer):
             self.set_buttons_enabled(True)
             self.update_display()
 
+class LinkedListVisualizer(BaseVisualizer):
+    def __init__(self, main_window=None):
+        super().__init__(main_window, "链表 (LinkedList) 可视化工具")
+        # 初始化链表
+        self.data_structure = LinkedList()
+        self.visual_area.set_data_structure(self.data_structure)
+        self.current_operation = None
+        self.operation_data = None
+
+    def _create_input_layout(self):
+        # 主输入布局
+        main_input_layout = QVBoxLayout()
+
+        # 头部插入布局
+        head_insert_layout = QHBoxLayout()
+        self.head_insert_input = QLineEdit()
+        self.head_insert_input.setPlaceholderText("输入元素值")
+        self.head_insert_btn = QPushButton("头部插入")
+        self.head_insert_btn.clicked.connect(self.handle_head_insert)
+        self.head_insert_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; }")
+
+        head_insert_layout.addWidget(QLabel("头部插入:"))
+        head_insert_layout.addWidget(self.head_insert_input)
+        head_insert_layout.addWidget(self.head_insert_btn)
+
+        # 尾部插入布局
+        tail_insert_layout = QHBoxLayout()
+        self.tail_insert_input = QLineEdit()
+        self.tail_insert_input.setPlaceholderText("输入元素值")
+        self.tail_insert_btn = QPushButton("尾部插入")
+        self.tail_insert_btn.clicked.connect(self.handle_tail_insert)
+        self.tail_insert_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; }")
+
+        tail_insert_layout.addWidget(QLabel("尾部插入:"))
+        tail_insert_layout.addWidget(self.tail_insert_input)
+        tail_insert_layout.addWidget(self.tail_insert_btn)
+
+        # 按位置插入布局
+        pos_insert_layout = QHBoxLayout()
+        self.pos_insert_val = QLineEdit()
+        self.pos_insert_val.setPlaceholderText("元素值")
+        self.pos_insert_pos = QLineEdit()
+        self.pos_insert_pos.setPlaceholderText("位置")
+        self.pos_insert_btn = QPushButton("按位置插入")
+        self.pos_insert_btn.clicked.connect(self.handle_pos_insert)
+        self.pos_insert_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; }")
+
+        pos_insert_layout.addWidget(QLabel("按位置插入:"))
+        pos_insert_layout.addWidget(self.pos_insert_val)
+        pos_insert_layout.addWidget(QLabel("位置:"))
+        pos_insert_layout.addWidget(self.pos_insert_pos)
+        pos_insert_layout.addWidget(self.pos_insert_btn)
+
+        # 修改、查找布局
+        modify_search_layout = QHBoxLayout()
+        self.modify_val = QLineEdit()
+        self.modify_val.setPlaceholderText("新值")
+        self.modify_pos = QLineEdit()
+        self.modify_pos.setPlaceholderText("位置")
+        self.modify_btn = QPushButton("修改")
+        self.modify_btn.clicked.connect(self.handle_modify)
+        self.modify_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; }")
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("查找值")
+        self.search_btn = QPushButton("查找")
+        self.search_btn.clicked.connect(self.handle_search)
+        self.search_btn.setStyleSheet("QPushButton { background-color: #FFC107; color: black; }")
+
+        modify_search_layout.addWidget(QLabel("修改:"))
+        modify_search_layout.addWidget(self.modify_val)
+        modify_search_layout.addWidget(QLabel("位置:"))
+        modify_search_layout.addWidget(self.modify_pos)
+        modify_search_layout.addWidget(self.modify_btn)
+        modify_search_layout.addWidget(QLabel("查找:"))
+        modify_search_layout.addWidget(self.search_input)
+        modify_search_layout.addWidget(self.search_btn)
+
+        # 删除布局
+        delete_layout = QHBoxLayout()
+        self.delete_pos = QLineEdit()
+        self.delete_pos.setPlaceholderText("删除位置")
+        self.delete_pos_btn = QPushButton("按位置删除")
+        self.delete_pos_btn.clicked.connect(self.handle_delete_by_pos)
+        self.delete_pos_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; }")
+
+        self.delete_val = QLineEdit()
+        self.delete_val.setPlaceholderText("删除值")
+        self.delete_val_btn = QPushButton("按值删除")
+        self.delete_val_btn.clicked.connect(self.handle_delete_by_val)
+        self.delete_val_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; }")
+
+        delete_layout.addWidget(QLabel("按位置删除:"))
+        delete_layout.addWidget(self.delete_pos)
+        delete_layout.addWidget(self.delete_pos_btn)
+        delete_layout.addWidget(QLabel("按值删除:"))
+        delete_layout.addWidget(self.delete_val)
+        delete_layout.addWidget(self.delete_val_btn)
+
+        # 添加所有子布局
+        main_input_layout.addLayout(head_insert_layout)
+        main_input_layout.addLayout(tail_insert_layout)
+        main_input_layout.addLayout(pos_insert_layout)
+        main_input_layout.addLayout(modify_search_layout)
+        main_input_layout.addLayout(delete_layout)
+
+        return main_input_layout
+
+    def _create_button_layout(self):
+        button_layout = QHBoxLayout()
+
+        self.get_btn = QPushButton("获取元素")
+        self.get_btn.clicked.connect(self.handle_get)
+        self.get_btn.setStyleSheet("QPushButton { background-color: #9C27B0; color: white; }")
+
+        self.clear_btn = QPushButton("清空链表")
+        self.clear_btn.clicked.connect(self.handle_clear)
+        self.clear_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; }")
+
+        self.length_btn = QPushButton("链表长度")
+        self.length_btn.clicked.connect(self.handle_length)
+        self.length_btn.setStyleSheet("QPushButton { background-color: #795548; color: white; }")
+
+        button_layout.addWidget(self.get_btn)
+        button_layout.addWidget(self.length_btn)
+        button_layout.addWidget(self.clear_btn)
+        button_layout.addStretch()
+
+        return button_layout
+
+    def handle_head_insert(self):
+        self.play_click_sound()
+        if self.animating:
+            return
+
+        value = self.head_insert_input.text().strip()
+        if not value:
+            QMessageBox.warning(self, "输入错误", "请输入要插入的元素")
+            return
+
+        self.current_operation = "head_insert"
+        self.operation_data = value
+        self.animating = True
+        self.highlighted_index = 0
+        self.status_label.setText(f"正在头部插入: {value}...")
+        self.update_display()
+        self.set_buttons_enabled(False)
+        QTimer.singleShot(self.animation_speed, self.execute_operation)
+
+    def handle_tail_insert(self):
+        self.play_click_sound()
+        if self.animating:
+            return
+
+        value = self.tail_insert_input.text().strip()
+        if not value:
+            QMessageBox.warning(self, "输入错误", "请输入要插入的元素")
+            return
+
+        pos = self.data_structure.length()
+        self.current_operation = "tail_insert"
+        self.operation_data = value
+        self.animating = True
+        self.highlighted_index = pos
+        self.status_label.setText(f"正在尾部插入: {value}...")
+        self.update_display()
+        self.set_buttons_enabled(False)
+        QTimer.singleShot(self.animation_speed, self.execute_operation)
+
+    def handle_pos_insert(self):
+        self.play_click_sound()
+        if self.animating:
+            return
+
+        value = self.pos_insert_val.text().strip()
+        pos_text = self.pos_insert_pos.text().strip()
+
+        if not value or not pos_text:
+            QMessageBox.warning(self, "输入错误", "请输入元素值和位置")
+            return
+
+        try:
+            pos = int(pos_text)
+        except ValueError:
+            QMessageBox.warning(self, "输入错误", "位置必须是整数")
+            return
+
+        length = self.data_structure.length()
+        if pos < 0 or pos > length:
+            QMessageBox.warning(self, "位置无效", f"位置必须在0到{length}之间")
+            return
+
+        self.current_operation = "pos_insert"
+        self.operation_data = (value, pos)
+        self.animating = True
+        self.highlighted_index = pos
+        self.status_label.setText(f"正在位置 {pos} 插入: {value}...")
+        self.update_display()
+        self.set_buttons_enabled(False)
+        QTimer.singleShot(self.animation_speed, self.execute_operation)
+
+    def handle_delete_by_pos(self):
+        self.play_click_sound()
+        if self.animating or self.data_structure.is_empty():
+            if self.data_structure.is_empty():
+                QMessageBox.warning(self, "操作错误", "链表为空，无法删除")
+            return
+
+        pos_text = self.delete_pos.text().strip()
+        if not pos_text:
+            QMessageBox.warning(self, "输入错误", "请输入删除位置")
+            return
+
+        try:
+            pos = int(pos_text)
+        except ValueError:
+            QMessageBox.warning(self, "输入错误", "位置必须是整数")
+            return
+
+        length = self.data_structure.length()
+        if pos < 0 or pos >= length:
+            QMessageBox.warning(self, "位置无效", f"位置必须在0到{length-1}之间")
+            return
+
+        self.current_operation = "delete_by_pos"
+        self.operation_data = pos
+        self.animating = True
+        self.highlighted_index = pos
+        self.status_label.setText(f"正在删除位置 {pos} 的元素...")
+        self.update_display()
+        self.set_buttons_enabled(False)
+        QTimer.singleShot(self.animation_speed, self.execute_operation)
+
+    def handle_delete_by_val(self):
+        self.play_click_sound()
+        if self.animating or self.data_structure.is_empty():
+            if self.data_structure.is_empty():
+                QMessageBox.warning(self, "操作错误", "链表为空，无法删除")
+            return
+
+        value = self.delete_val.text().strip()
+        if not value:
+            QMessageBox.warning(self, "输入错误", "请输入要删除的值")
+            return
+
+        index = self.data_structure.locate(value)
+        if index == -1:
+            QMessageBox.information(self, "未找到", f"未找到元素: {value}")
+            return
+
+        self.current_operation = "delete_by_val"
+        self.operation_data = index
+        self.animating = True
+        self.highlighted_index = index
+        self.status_label.setText(f"正在删除值为 {value} 的元素...")
+        self.update_display()
+        self.set_buttons_enabled(False)
+        QTimer.singleShot(self.animation_speed, self.execute_operation)
+
+    def handle_modify(self):
+        self.play_click_sound()
+        if self.animating or self.data_structure.is_empty():
+            if self.data_structure.is_empty():
+                QMessageBox.warning(self, "操作错误", "链表为空，无法修改")
+            return
+
+        value = self.modify_val.text().strip()
+        pos_text = self.modify_pos.text().strip()
+
+        if not value or not pos_text:
+            QMessageBox.warning(self, "输入错误", "请输入新值和位置")
+            return
+
+        try:
+            pos = int(pos_text)
+        except ValueError:
+            QMessageBox.warning(self, "输入错误", "位置必须是整数")
+            return
+
+        length = self.data_structure.length()
+        if pos < 0 or pos >= length:
+            QMessageBox.warning(self, "位置无效", f"位置必须在0到{length-1}之间")
+            return
+
+        self.current_operation = "modify"
+        self.operation_data = (value, pos)
+        self.animating = True
+        self.highlighted_index = pos
+        self.status_label.setText(f"正在修改位置 {pos} 的元素...")
+        self.update_display()
+        self.set_buttons_enabled(False)
+        QTimer.singleShot(self.animation_speed, self.execute_operation)
+
+    def handle_search(self):
+        self.play_click_sound()
+        if self.data_structure.is_empty():
+            QMessageBox.warning(self, "操作错误", "链表为空，无法查找")
+            return
+
+        value = self.search_input.text().strip()
+        if not value:
+            QMessageBox.warning(self, "输入错误", "请输入要查找的值")
+            return
+
+        index = self.data_structure.locate(value)
+        if index != -1:
+            self.highlighted_index = index
+            self.status_label.setText(f"找到元素 {value} 在位置 {index}")
+            self.update_display()
+            QTimer.singleShot(2000, self.clear_highlight)
+        else:
+            self.status_label.setText(f"未找到元素: {value}")
+            self.update_display()
+
+    def handle_get(self):
+        self.play_click_sound()
+        if self.data_structure.is_empty():
+            QMessageBox.warning(self, "操作错误", "链表为空，无法获取元素")
+            return
+
+        pos_text = self.modify_pos.text().strip()
+        if not pos_text:
+            QMessageBox.warning(self, "输入错误", "请输入要获取元素的位置")
+            return
+
+        try:
+            pos = int(pos_text)
+        except ValueError:
+            QMessageBox.warning(self, "输入错误", "位置必须是整数")
+            return
+
+        length = self.data_structure.length()
+        if pos < 0 or pos >= length:
+            QMessageBox.warning(self, "位置无效", f"位置必须在0到{length-1}之间")
+            return
+
+        value = self.data_structure.get(pos)
+        self.highlighted_index = pos
+        self.status_label.setText(f"位置 {pos} 的元素是: {value}")
+        self.update_display()
+        QTimer.singleShot(2000, self.clear_highlight)
+
+    def handle_clear(self):
+        self.play_click_sound()
+        if self.data_structure.is_empty():
+            QMessageBox.information(self, "提示", "链表已经是空的")
+            return
+
+        reply = QMessageBox.question(self, "确认清空",
+                                     "确定要清空链表中的所有元素吗？",
+                                     QMessageBox.Yes | QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            self.data_structure.clear()
+            self.highlighted_index = -1
+            self.status_label.setText("链表已清空")
+            self.update_display()
+
+    def handle_length(self):
+        self.play_click_sound()
+        length = self.data_structure.length()
+        self.status_label.setText(f"链表长度: {length} 个元素")
+        self.update_display()
+
+    def _update_status_text(self):
+        length = self.data_structure.length()
+        if length > 0:
+            self.status_label.setText(f"链表状态: {length} 个元素")
+        else:
+            self.status_label.setText("链表状态: 空")
+
+    def set_buttons_enabled(self, enabled):
+        # 所有按钮和输入框的启用状态控制
+        self.head_insert_btn.setEnabled(enabled)
+        self.tail_insert_btn.setEnabled(enabled)
+        self.pos_insert_btn.setEnabled(enabled)
+        self.modify_btn.setEnabled(enabled)
+        self.search_btn.setEnabled(enabled)
+        self.delete_pos_btn.setEnabled(enabled)
+        self.delete_val_btn.setEnabled(enabled)
+        self.get_btn.setEnabled(enabled)
+        self.clear_btn.setEnabled(enabled)
+        self.length_btn.setEnabled(enabled)
+
+        self.head_insert_input.setEnabled(enabled)
+        self.tail_insert_input.setEnabled(enabled)
+        self.pos_insert_val.setEnabled(enabled)
+        self.pos_insert_pos.setEnabled(enabled)
+        self.modify_val.setEnabled(enabled)
+        self.modify_pos.setEnabled(enabled)
+        self.search_input.setEnabled(enabled)
+        self.delete_pos.setEnabled(enabled)
+        self.delete_val.setEnabled(enabled)
+
+    def execute_operation(self):
+        try:
+            if self.current_operation == "head_insert":
+                value = self.operation_data
+                self.data_structure.insert(0, value)
+                self.status_label.setText(f"已在头部插入: {value}")
+                self.head_insert_input.clear()
+
+            elif self.current_operation == "tail_insert":
+                value = self.operation_data
+                pos = self.data_structure.length()
+                self.data_structure.insert(pos, value)
+                self.status_label.setText(f"已在尾部插入: {value}")
+                self.tail_insert_input.clear()
+
+            elif self.current_operation == "pos_insert":
+                value, pos = self.operation_data
+                self.data_structure.insert(pos, value)
+                self.status_label.setText(f"已在位置 {pos} 插入: {value}")
+                self.pos_insert_val.clear()
+                self.pos_insert_pos.clear()
+
+            elif self.current_operation == "delete_by_pos":
+                pos = self.operation_data
+                deleted_value = self.data_structure.remove(pos)
+                self.status_label.setText(f"已删除位置 {pos} 的元素: {deleted_value}")
+                self.delete_pos.clear()
+
+            elif self.current_operation == "delete_by_val":
+                pos = self.operation_data
+                deleted_value = self.data_structure.remove(pos)
+                self.status_label.setText(f"已删除元素: {deleted_value} (位置 {pos})")
+                self.delete_val.clear()
+
+            elif self.current_operation == "modify":
+                value, pos = self.operation_data
+                old_value = self.data_structure.get(pos)
+                self.data_structure.set(pos, value)
+                self.status_label.setText(f"已修改位置 {pos}: {old_value} → {value}")
+                self.modify_val.clear()
+                self.modify_pos.clear()
+
+            self.animating = False
+            self.highlighted_index = -1
+            self.set_buttons_enabled(True)
+            self.update_display()
+
+        except Exception as e:
+            print(f"操作执行错误: {e}")
+            self.status_label.setText(f"错误: {str(e)}")
+            self.animating = False
+            self.highlighted_index = -1
+            self.set_buttons_enabled(True)
+            self.update_display()
+
 
 def main():
     try:
@@ -888,9 +1458,9 @@ def main():
         app.setApplicationName("SequenceList Visualizer")
         app.setStyle('Fusion')
 
-        window = SequenceListVisualizer()
+        #window = SequenceListVisualizer()
         #window = StackVisualizer()
-        #window=LinkedListVisualizer()
+        window=LinkedListVisualizer()
         window.show()
 
         print("顺序表可视化工具启动成功")
