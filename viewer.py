@@ -9,7 +9,8 @@ import traceback
 
 from model import SequenceList
 
-from visualization import StackVisualizer
+from visualization import StackVisualizer, SequenceListVisualizer
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -225,8 +226,34 @@ class SequentialStructureWindow(QMainWindow):
         self.button_stack.clicked.connect(self.on_button_stack_clicked)
         button_layout.addWidget(self.button_stack)
 
+
+
+        self.button_sequencelist = QPushButton("顺序表")
+        self.button_sequencelist.setMinimumSize(150, 60)
+        self.button_sequencelist.setFont(QFont("SimHei", 12))
+        self.button_sequencelist.setStyleSheet("""
+                            QPushButton {
+                                background-color: rgba(60, 130, 255, 0.8);
+                                color: white;
+                                border-radius: 10px;
+                                border: none;
+                            }
+                            QPushButton:hover {
+                                background-color: rgba(60, 130, 255, 1.0);
+                                transform: scale(1.05);
+                            }
+                        """)
+        self.button_sequencelist.clicked.connect(self.on_button_sequencelist_clicked)
+        button_layout.addWidget(self.button_sequencelist)
+
         # 将按钮布局添加到主布局
         main_layout.addLayout(button_layout)
+
+
+
+
+
+
 
         # 添加底部间距
         main_layout.addSpacing(80)
@@ -242,6 +269,11 @@ class SequentialStructureWindow(QMainWindow):
         """栈可视化按钮点击事件处理"""
         self.play_click_sound()
         self.go_to_stack()
+
+    def on_button_sequencelist_clicked(self):
+        """顺序表可视化按钮点击事件处理"""
+        self.play_click_sound()
+        self.go_to_sequencelist()
 
 
     def back_to_main(self):
@@ -260,6 +292,18 @@ class SequentialStructureWindow(QMainWindow):
             print(f"应用程序错误: {e}")
             traceback.print_exc()
             QMessageBox.critical(self, "错误", f"打开栈可视化工具时出错: {e}")
+
+    def go_to_sequencelist(self):
+        try:
+            self.sequencelist_window=SequenceListVisualizer(self.mainwindow)
+            self.sequencelist_window.show()
+            self.hide()
+            print("顺序表可视化工具启动成功")
+        except Exception as e:
+            print(f"应用程序错误:{e}")
+            traceback.print_exc()
+            QMessageBox.critical(self,"错误",f"打开顺序表可视化工具时出错:{e}")
+
 
     def init_sound_effects(self):
         self.click_sound=QSoundEffect()
