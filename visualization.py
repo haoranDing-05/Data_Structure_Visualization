@@ -2,11 +2,11 @@ import sys
 import traceback
 import math
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-                             QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox)
-from PyQt5.QtCore import Qt, QTimer, QUrl,QPointF
+                             QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox, QTextEdit, QGridLayout)
+from PyQt5.QtCore import Qt, QTimer, QUrl,QPointF,QPoint
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QBrush,QPolygonF
 from PyQt5.QtMultimedia import QSoundEffect
-from model import Stack, SequenceList, LinkedList
+from model import Stack, SequenceList, LinkedList,BinaryTree,BinarySearchTree,HuffmanTree,HuffmanNode,BinaryTreeNode
 
 
 class VisualArea(QWidget):
@@ -55,6 +55,8 @@ class VisualArea(QWidget):
                 self._draw_linear_structure(painter)
             elif isinstance(self.data_structure, LinkedList):
                 self._draw_linked_list(painter)
+            elif isinstance(self.data_structure, (BinaryTree, HuffmanTree)):
+                self._draw_tree(painter)  # 新增：绘制树形结构
             else:
                 painter.drawText(self.rect(), Qt.AlignCenter, "不支持的结构类型")
 
@@ -279,6 +281,169 @@ class VisualArea(QWidget):
         painter.setPen(QPen(QColor(100, 100, 100), 1))
         painter.setFont(QFont("Arial", 9))
         painter.drawText(10, 10, 200, 20, Qt.AlignLeft, f"链表长度: {length} 个节点")
+
+    def _draw_tree(self, painter):
+        """绘制树形结构（二叉树、哈夫曼树等），使用圆形节点 - 修复版本"""
+        tree = self.data_structure
+        if tree.is_empty():
+            painter.setFont(QFont("Arial", 12, QFont.Italic))
+            painter.setPen(QColor(150, 150, 150))
+            painter.drawText(self.rect(), Qt.AlignCenter, "空树")
+            return
+
+        # 计算树的高度以确定布局
+        tree_height = self._get_tree_height(tree.root)
+        area_width = self.width()
+        area_height = self.height()
+
+        # 计算根节点起始位置
+        start_x = area_width // 2
+        start_y = 80  # 增加顶部间距
+
+        # 根据树高度动态计算水平间距
+        base_spacing = min(area_width // max(tree_height, 1), 200)
+        level_spacing = base_spacing
+
+        # 递归绘制树
+        self._draw_tree_node(painter, tree.root, start_x, start_y, level_spacing, tree_height)
+
+        # 显示树的基本信息
+        painter.setPen(QPen(QColor(100, 100, 100), 1))
+        painter.setFont(QFont("Arial", 9))
+        tree_type = "哈夫曼树" if isinstance(tree, HuffmanTree) else "二叉树"
+        painter.drawText(10, 10, 200, 20, Qt.AlignLeft, f"{tree_type} 节点数: {tree.length()}")
+
+    def _get_tree_height(self, node):
+        """计算树的高度"""
+        if not node:
+            return 0
+        return 1 + max(self._get_tree_height(node.left_child), self._get_tree_height(node.right_child))
+
+    def _draw_tree_node(self, painter, node, x, y, level_spacing, remaining_height):
+        """递归绘制树节点 - 修复版本"""
+        if not node:
+            return
+
+        # 节点半径
+        radius = 25
+
+        # 绘制当前节点（圆形）
+        if hasattr(self, 'highlighted_node') and self.highlighted_node == node:
+            painter.setBrush(QBrush(QColor(255, 215, 0)))  # 高亮色（金色）
+        else:
+            # 哈夫曼树的叶子节点和内部节点用不同颜色
+            if isinstance(node, HuffmanNode):
+                if node.data is not None:  # 叶子节点
+                    painter.setBrush(QBrush(QColor(144, 238, 144)))  # 浅绿色
+                else:  # 内部节点
+                    painter.setBrush(QBrush(QColor(255, 182, 193)))  # 浅粉色
+            else:
+                painter.setBrush(QBrush(QColor(173, 216, 230)))  # 浅蓝色
+
+        painter.setPen(QPen(QColor(0, 0, 0), 2))
+        painter.drawEllipse(QPoint(int(x), int(y)), radius, radius)
+
+        # 绘制节点数据
+        painter.setPen(QPen(QColor(0, 0, 0), 1))
+        painter.setFont(QFont("Arial", 8, QFont.Bold))  # 减小字体以适应圆形
+
+        # 哈夫曼树显示数据和权重
+        if isinstance(node, HuffmanNode):
+            if node.data is not None:
+                display_text = f"{node.data}\n{node.weight}"
+            else:
+                display_text = f"W:{node.weight}"
+        else:
+            display_text = str(node.data)
+
+        # 确保文本在圆形内
+        text_rect = painter.boundingRect(int(x - radius), int(y - radius),
+                                         radius * 2, radius * 2,
+                                         Qt.AlignCenter, display_text)
+        painter.drawText(text_rect, Qt.AlignCenter, display_text)
+
+        # 计算下一层的水平间距和垂直位置
+        next_level_spacing = level_spacing * 0.6  # 减少水平间距避免重叠
+        next_y = y + self.tree_level_spacing
+
+        # 绘制左子树
+        if node.left_child:
+            left_x = x - next_level_spacing
+            # 绘制连接线
+            self._draw_tree_edge(painter, x, y, left_x, next_y, radius, is_left=True)
+            # 递归绘制左子节点
+            self._draw_tree_node(painter, node.left_child, left_x, next_y, next_level_spacing, remaining_height - 1)
+
+        # 绘制右子树
+        if node.right_child:
+            right_x = x + next_level_spacing
+            # 绘制连接线
+            self._draw_tree_edge(painter, x, y, right_x, next_y, radius, is_left=False)
+            # 递归绘制右子节点
+            self._draw_tree_node(painter, node.right_child, right_x, next_y, next_level_spacing, remaining_height - 1)
+
+    def _draw_tree_edge(self, painter, parent_x, parent_y, child_x, child_y, radius, is_left):
+        """绘制树节点间的连接线 - 修复版本"""
+        # 计算连接点（从父节点底部边缘到子节点顶部边缘）
+        parent_edge_y = parent_y + radius
+        child_edge_y = child_y - radius
+
+        # 计算连接线的起点和终点
+        start_x = parent_x
+        start_y = parent_edge_y
+        end_x = child_x
+        end_y = child_edge_y
+
+        # 绘制连接线
+        painter.setPen(QPen(QColor(0, 0, 255), 2))
+        painter.drawLine(
+            int(round(start_x)),
+            int(round(start_y)),
+            int(round(end_x)),
+            int(round(end_y))
+        )
+
+        # 绘制左/右标记（0/1）
+        mid_x = (start_x + end_x) / 2
+        mid_y = (start_y + end_y) / 2
+        painter.setFont(QFont("Arial", 9, QFont.Bold))
+        painter.setPen(QPen(QColor(255, 0, 0)))  # 红色标记
+        painter.drawText(
+            int(round(mid_x - 5)),
+            int(round(mid_y - 10)),
+            10, 10,
+            Qt.AlignCenter,
+            "0" if is_left else "1"
+        )
+
+    def add_child(self, is_left):
+        try:
+            parent_index_text = self.parent_index_input.text().strip()
+            value = self.child_value_input.text().strip()
+
+            # 先检查输入是否为空
+            if not parent_index_text:
+                QMessageBox.warning(self, "输入错误", "请输入父节点索引")
+                return
+
+            if not value:
+                QMessageBox.warning(self, "输入错误", "请输入子节点值")
+                return
+
+            # 再转换为整数
+            parent_index = int(parent_index_text)
+
+            if is_left:
+                self.data_structure.insert_left(parent_index, value)
+            else:
+                self.data_structure.insert_right(parent_index, value)
+
+            self.update_display()
+            self.play_click_sound()
+        except ValueError:
+            QMessageBox.warning(self, "输入错误", "请输入有效的父节点索引（必须是整数）")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"添加子节点失败: {str(e)}")
 
 
 class BaseVisualizer(QWidget):
@@ -1452,18 +1617,225 @@ class LinkedListVisualizer(BaseVisualizer):
             self.update_display()
 
 
+# 实现TreeVisualizer子类
+class BinaryTreeVisualizer(BaseVisualizer):
+    def __init__(self, main_window=None):
+        super().__init__(main_window, "二叉树可视化工具")
+        self.data_structure = BinaryTree()
+        self.visual_area.set_data_structure(self.data_structure)
+        self.highlighted_node = None
+
+    def _create_input_layout(self):
+        layout = QGridLayout()
+
+        # 根节点输入
+        layout.addWidget(QLabel("根节点值:"), 0, 0)
+        self.root_input = QLineEdit()
+        layout.addWidget(self.root_input, 0, 1)
+
+        # 父节点索引和子节点值输入
+        layout.addWidget(QLabel("父节点索引:"), 1, 0)
+        self.parent_index_input = QLineEdit()
+        layout.addWidget(self.parent_index_input, 1, 1)
+
+        layout.addWidget(QLabel("子节点值:"), 2, 0)
+        self.child_value_input = QLineEdit()
+        layout.addWidget(self.child_value_input, 2, 1)
+
+        return layout
+
+    def _create_button_layout(self):
+        layout = QHBoxLayout()
+
+        self.btn_create_root = QPushButton("创建根节点")
+        self.btn_create_root.clicked.connect(self.create_root)
+
+        self.btn_add_left = QPushButton("添加左子节点")
+        self.btn_add_left.clicked.connect(lambda: self.add_child(True))
+
+        self.btn_add_right = QPushButton("添加右子节点")
+        self.btn_add_right.clicked.connect(lambda: self.add_child(False))
+
+        self.btn_clear = QPushButton("清空树")
+        self.btn_clear.clicked.connect(self.clear_tree)
+
+        self.btn_traverse = QPushButton("显示遍历结果")
+        self.btn_traverse.clicked.connect(self.show_traversal)
+
+        for btn in [self.btn_create_root, self.btn_add_left, self.btn_add_right, self.btn_clear, self.btn_traverse]:
+            btn.setMinimumHeight(30)
+            layout.addWidget(btn)
+
+        return layout
+
+    def create_root(self):
+        try:
+            value = self.root_input.text().strip()
+            if not value:
+                QMessageBox.warning(self, "输入错误", "请输入根节点值")
+                return
+
+            self.data_structure = BinaryTree(value)
+            self.visual_area.set_data_structure(self.data_structure)
+            self.update_display()
+            self.play_click_sound()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"创建根节点失败: {str(e)}")
+
+    def add_child(self, is_left):
+        try:
+            parent_index = int(self.parent_index_input.text().strip())
+            value = self.child_value_input.text().strip()
+
+            if not value:
+                QMessageBox.warning(self, "输入错误", "请输入子节点值")
+                return
+
+            if is_left:
+                self.data_structure.insert_left(parent_index, value)
+            else:
+                self.data_structure.insert_right(parent_index, value)
+
+            self.update_display()
+            self.play_click_sound()
+        except ValueError:
+            QMessageBox.warning(self, "输入错误", "请输入有效的父节点索引")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"添加子节点失败: {str(e)}")
+
+    def clear_tree(self):
+        self.data_structure.clear()
+        self.visual_area.set_data_structure(self.data_structure)
+        self.update_display()
+        self.play_click_sound()
+
+    def show_traversal(self):
+        if self.data_structure.is_empty():
+            QMessageBox.information(self, "遍历结果", "树为空")
+            return
+
+        preorder = []
+        inorder = []
+        postorder = []
+        self.data_structure._preorder_traversal(self.data_structure.root, preorder)
+        self.data_structure._inorder_traversal(self.data_structure.root, inorder)
+        self.data_structure._postorder_traversal(self.data_structure.root, postorder)
+
+        msg = f"前序遍历: {preorder}\n中序遍历: {inorder}\n后序遍历: {postorder}"
+        QMessageBox.information(self, "遍历结果", msg)
+
+    def _update_status_text(self):
+        self.status_label.setText(f"二叉树状态: {self.data_structure.length()} 个节点")
+
+    def set_buttons_enabled(self, enabled):
+        for btn in [self.btn_create_root, self.btn_add_left, self.btn_add_right, self.btn_clear, self.btn_traverse]:
+            btn.setEnabled(enabled)
+
+
+class HuffmanTreeVisualizer(BaseVisualizer):
+    def __init__(self, main_window=None):
+        super().__init__(main_window, "哈夫曼树可视化工具")
+        self.data_structure = HuffmanTree()
+        self.visual_area.set_data_structure(self.data_structure)
+        self.highlighted_node = None
+
+    def _create_input_layout(self):
+        layout = QVBoxLayout()
+
+        self.weight_input = QTextEdit()
+        self.weight_input.setPlaceholderText(
+            "请输入数据和权重，格式：数据1:权重1,数据2:权重2,...\n例如：A:5,B:9,C:12,D:13,E:16,F:45")
+        self.weight_input.setMinimumHeight(60)
+
+        layout.addWidget(QLabel("输入数据及权重:"))
+        layout.addWidget(self.weight_input)
+
+        return layout
+
+    def _create_button_layout(self):
+        layout = QHBoxLayout()
+
+        self.btn_build = QPushButton("构建哈夫曼树")
+        self.btn_build.clicked.connect(self.build_huffman_tree)
+
+        self.btn_show_codes = QPushButton("显示哈夫曼编码")
+        self.btn_show_codes.clicked.connect(self.show_huffman_codes)
+
+        self.btn_clear = QPushButton("清空")
+        self.btn_clear.clicked.connect(self.clear_tree)
+
+        for btn in [self.btn_build, self.btn_show_codes, self.btn_clear]:
+            btn.setMinimumHeight(30)
+            layout.addWidget(btn)
+
+        return layout
+
+    def build_huffman_tree(self):
+        try:
+            input_text = self.weight_input.text().strip()
+            if not input_text:
+                QMessageBox.warning(self, "输入错误", "请输入数据和权重")
+                return
+
+            # 解析输入
+            weight_dict = {}
+            items = input_text.split(',')
+            for item in items:
+                data, weight = item.split(':')
+                weight_dict[data.strip()] = int(weight.strip())
+
+            # 构建哈夫曼树
+            self.data_structure = HuffmanTree(weight_dict)
+            self.visual_area.set_data_structure(self.data_structure)
+            self.update_display()
+            self.play_click_sound()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"构建哈夫曼树失败: {str(e)}")
+
+    def show_huffman_codes(self):
+        if self.data_structure.is_empty():
+            QMessageBox.information(self, "哈夫曼编码", "哈夫曼树为空")
+            return
+
+        codes = self.data_structure.get_huffman_code()
+        if not codes:
+            QMessageBox.information(self, "哈夫曼编码", "无法生成编码")
+            return
+
+        msg = "哈夫曼编码:\n"
+        for data, code in codes.items():
+            msg += f"{data}: {code}\n"
+
+        QMessageBox.information(self, "哈夫曼编码", msg)
+
+    def clear_tree(self):
+        self.data_structure = HuffmanTree()
+        self.visual_area.set_data_structure(self.data_structure)
+        self.update_display()
+        self.play_click_sound()
+
+    def _update_status_text(self):
+        self.status_label.setText(f"哈夫曼树状态: {self.data_structure.length()} 个节点")
+
+    def set_buttons_enabled(self, enabled):
+        for btn in [self.btn_build, self.btn_show_codes, self.btn_clear]:
+            btn.setEnabled(enabled)
+
+
 def main():
     try:
         app = QApplication(sys.argv)
-        app.setApplicationName("SequenceList Visualizer")
+        app.setApplicationName("BinaryTree Visualizer")
         app.setStyle('Fusion')
 
         #window = SequenceListVisualizer()
         #window = StackVisualizer()
-        window=LinkedListVisualizer()
+        #window=LinkedListVisualizer()
+        #window=BinaryTreeVisualizer()
+        window=HuffmanTreeVisualizer()
         window.show()
 
-        print("顺序表可视化工具启动成功")
+        print("二叉树可视化工具启动成功")
         return app.exec_()
 
     except Exception as e:
