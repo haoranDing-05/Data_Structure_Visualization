@@ -1,13 +1,20 @@
 import sys
 import traceback
 import math
+from fileinput import filename
+from msilib.schema import SelfReg
+
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-                             QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox, QTextEdit, QGridLayout)
+                             QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox, QTextEdit, QGridLayout,
+                             QScrollArea)
 from PyQt5.QtCore import Qt, QTimer, QUrl,QPointF,QPoint
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QBrush,QPolygonF
 from PyQt5.QtMultimedia import QSoundEffect
 from model import Stack, SequenceList, LinkedList,BinaryTree,BinarySearchTree,HuffmanTree,HuffmanNode,BinaryTreeNode
-
+from PyQt5.QtWidgets import QFileDialog
+import os
+from datetime import datetime
+import json
 
 class VisualArea(QWidget):
     """通用数据结构可视化组件"""
@@ -32,6 +39,7 @@ class VisualArea(QWidget):
         """设置要可视化的数据结构"""
         self.data_structure = ds
         self.update()
+
 
     def update_visualization(self, ds=None, highlighted_index=-1):
         """更新可视化状态"""
@@ -176,7 +184,6 @@ class VisualArea(QWidget):
         painter.drawLine(start_x, start_y, end_x, end_y)
 
         # 计算箭头角度
-        import math
         angle = math.atan2(end_y - start_y, end_x - start_x) * 180 / math.pi
 
         # 设置箭头大小
@@ -449,10 +456,12 @@ class VisualArea(QWidget):
 class BaseVisualizer(QWidget):
     """数据结构可视化父类"""
 
-    def __init__(self, main_window=None, title="数据结构可视化工具"):
+    def __init__(self, main_window=None,last_window=None, title="数据结构可视化工具"):
         super().__init__()
         # 保存主窗口引用
         self.main_window = main_window
+        #保存上一级窗口引用
+        self.last_window=last_window
         # 数据结构实例（由子类初始化）
         self.data_structure = None
         # 动画相关
@@ -465,7 +474,14 @@ class BaseVisualizer(QWidget):
         self.highlighted_index = -1
         self.title = title
 
+        # 最近保存文件管理
+        self.recent_files = []
+        self.max_recent_files = 5
+        self.recent_files_file = "recent_files.json"
+        self.load_recent_files()
+
         self.init_ui()
+        self.update_recent_files_display()
         self.init_sound_effects()
 
     def init_sound_effects(self):
@@ -500,6 +516,82 @@ class BaseVisualizer(QWidget):
         control_layout.addLayout(self._create_input_layout())
         control_layout.addLayout(self._create_button_layout())
 
+        # 文件操作布局
+        file_group=QGroupBox(f"{self.title.split('(')[0].strip()}操作")
+        file_layout = QVBoxLayout()
+
+        # 保存/加载按钮行
+        file_buttons_layout = QHBoxLayout()
+
+        self.save_btn = QPushButton("保存结构")
+        self.save_btn.setMinimumSize(120, 35)
+        self.save_btn.setFont(QFont("SimHei", 9))
+        self.save_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #28a745;
+                        color: white;
+                        border-radius: 8px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background-color: #218838;
+                    }
+                """)
+        self.save_btn.clicked.connect(self.save_structure)
+
+        self.load_btn = QPushButton("打开结构")
+        self.load_btn.setMinimumSize(120, 35)
+        self.load_btn.setFont(QFont("SimHei", 9))
+        self.load_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #17a2b8;
+                        color: white;
+                        border-radius: 8px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background-color: #138496;
+                    }
+                """)
+        self.load_btn.clicked.connect(self.load_structure)
+
+        file_buttons_layout.addWidget(self.save_btn)
+        file_buttons_layout.addWidget(self.load_btn)
+        #file_buttons_layout.setAlignment(Qt.AlignCenter)
+
+        file_buttons_layout.addStretch()
+
+
+
+        # 最近保存文件区域
+        recent_group = QGroupBox("最近保存的结构")
+        recent_layout = QVBoxLayout()
+
+        self.recent_list_widget = QWidget()
+        self.recent_list_layout = QVBoxLayout(self.recent_list_widget)
+        self.recent_list_layout.setSpacing(5)
+        self.recent_list_layout.setContentsMargins(5, 5, 5, 5)
+
+        # 滚动区域
+        scroll_area = QWidget()
+        scroll_layout = QHBoxLayout(scroll_area)
+        scroll_layout.addWidget(self.recent_list_widget)
+
+        recent_scroll = QScrollArea()
+        recent_scroll.setWidgetResizable(True)
+        recent_scroll.setWidget(scroll_area)
+        recent_scroll.setMaximumHeight(120)
+        recent_scroll.setStyleSheet("QScrollArea { border: 1px solid #ccc; border-radius: 4px; }")
+
+        recent_layout.addWidget(recent_scroll)
+        recent_group.setLayout(recent_layout)
+
+        file_layout.addLayout(file_buttons_layout)
+        file_layout.addWidget(recent_group)
+
+        file_group.setLayout(file_layout)
+        main_layout.addWidget(file_group)
+
         # 返回按钮布局
         button_return_layout = QHBoxLayout()
         self.button_return_main = QPushButton("返回主界面")
@@ -518,7 +610,26 @@ class BaseVisualizer(QWidget):
         """)
         self.button_return_main.clicked.connect(self.on_button_return_main_clicked)
         button_return_layout.addWidget(self.button_return_main)
+
+
+        self.button_return=QPushButton("返回")
+        self.button_return.setMinimumSize(150, 40)
+        self.button_return.setFont(QFont("SimHei", 10))
+        self.button_return.setStyleSheet("""
+                    QPushButton {
+                        background-color: rgba(60, 130, 255, 0.8);
+                        color: white;
+                        border-radius: 10px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background-color: rgba(60, 130, 255, 1.0);
+                    }
+                """)
+        self.button_return.clicked.connect(self.on_button_return_clicked)
+        button_return_layout.addWidget(self.button_return)
         button_return_layout.addStretch()
+
 
         # 速度控制
         speed_layout = QHBoxLayout()
@@ -578,6 +689,17 @@ class BaseVisualizer(QWidget):
         self.play_click_sound()
         self.back_to_main()
 
+    def on_button_return_clicked(self):
+        """返回按钮点击事件处理"""
+        print("返回按钮被点击")  # 添加调试信息
+        self.play_click_sound()
+        if self.last_window:
+            print(f"显示上一级窗口: {self.last_window}")
+            self.last_window.show()
+        else:
+            print("last_window 为 None")
+        self.close()
+
     def back_to_main(self):
         if self.main_window:
             self.main_window.show()
@@ -624,10 +746,227 @@ class BaseVisualizer(QWidget):
         """执行具体操作，由子类实现"""
         raise NotImplementedError("子类必须实现execute_operation方法")
 
+    def load_recent_files(self):
+        """加载最近保存的文件列表"""
+        try:
+            if os.path.exists(self.recent_files_file):
+                with open(self.recent_files_file, 'r', encoding='utf-8') as f:
+                    self.recent_files = json.load(f)
+        except Exception as e:
+            print(f"加载最近文件列表失败: {e}")
+            self.recent_files = []
+
+    def save_recent_files(self):
+        """保存最近文件列表到文件"""
+        try:
+            with open(self.recent_files_file, 'w', encoding='utf-8') as f:
+                json.dump(self.recent_files, f, ensure_ascii=False, indent=2)
+                print(1)
+        except Exception as e:
+            print(f"保存最近文件列表失败: {e}")
+
+    def add_to_recent_files(self, filename):
+        """添加文件到最近保存列表"""
+        # 移除已存在的相同文件
+        self.recent_files = [f for f in self.recent_files if f['path'] != filename]
+
+        # 添加新文件到开头
+        file_info = {
+            'path': filename,
+            'name': os.path.basename(filename),
+            'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'type': self.title.split('(')[0].strip()
+        }
+        self.recent_files.insert(0, file_info)
+
+        # 限制列表长度
+        if len(self.recent_files) > self.max_recent_files:
+            self.recent_files = self.recent_files[:self.max_recent_files]
+
+        # 保存更新后的列表
+        self.save_recent_files()
+        self.update_recent_files_display()
+
+    def update_recent_files_display(self):
+        """更新最近文件显示"""
+        # 清空现有显示
+        for i in reversed(range(self.recent_list_layout.count())):
+            widget = self.recent_list_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        if not self.recent_files:
+            no_files_label = QLabel("暂无最近保存的文件")
+            no_files_label.setStyleSheet("color: #666; font-style: italic; padding: 10px;")
+            no_files_label.setAlignment(Qt.AlignCenter)
+            no_files_label.setMinimumHeight(60)  # 确保有足够高度显示
+            self.recent_list_layout.addWidget(no_files_label)
+            return
+
+        for file_info in self.recent_files:
+            file_widget = self.create_recent_file_widget(file_info)
+            self.recent_list_layout.addWidget(file_widget)
+
+    def create_recent_file_widget(self, file_info):
+        """创建单个最近文件的小部件"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(8, 6, 8, 6)
+
+        # 文件信息标签
+        file_label = QLabel(f"{file_info['name']} ({file_info['time']})")
+        file_label.setStyleSheet("font-size: 9pt;")
+        file_label.setToolTip(f"路径: {file_info['path']}\n类型: {file_info['type']}")
+
+        # 加载按钮
+        load_btn = QPushButton("加载")
+        load_btn.setFixedSize(50, 25)
+        load_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                border-radius: 4px;
+                border: none;
+                font-size: 8pt;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+        """)
+        load_btn.clicked.connect(lambda checked, path=file_info['path']: self.load_recent_file(path))
+
+        layout.addWidget(file_label)
+        layout.addStretch()
+        layout.addWidget(load_btn)
+
+        widget.setStyleSheet("""
+            QWidget {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background-color: #f8f9fa;
+                margin: 2px;
+            }
+            QWidget:hover {
+                background-color: #e9ecef;
+            }
+        """)
+
+        widget.setMinimumHeight(35)  # 确保每个文件项有合适的高度
+        return widget
+
+    def load_recent_file(self, filepath):
+        """加载最近文件列表中的文件"""
+        if not os.path.exists(filepath):
+            QMessageBox.warning(self, "文件不存在", f"文件不存在: {filepath}")
+            # 从最近文件中移除
+            self.recent_files = [f for f in self.recent_files if f['path'] != filepath]
+            self.save_recent_files()
+            self.update_recent_files_display()
+            return
+
+        try:
+            from model import DataStructureManager
+            loaded_structure = DataStructureManager.load_structure(filepath)
+
+            if loaded_structure:
+                self.data_structure = loaded_structure
+                self.visual_area.set_data_structure(self.data_structure)
+                self.update_display()
+                self.status_label.setText(f"结构已加载: {os.path.basename(filepath)}")
+                self.play_click_sound()
+            else:
+                QMessageBox.warning(self, "加载失败", "无法加载数据结构文件")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载失败: {str(e)}")
+
+    def load_recent_file(self, filepath):
+        """加载最近文件列表中的文件"""
+        if not os.path.exists(filepath):
+            QMessageBox.warning(self, "文件不存在", f"文件不存在: {filepath}")
+            # 从最近文件中移除
+            self.recent_files = [f for f in self.recent_files if f['path'] != filepath]
+            self.save_recent_files()
+            self.update_recent_files_display()
+            return
+
+        try:
+            from model import DataStructureManager
+            loaded_structure = DataStructureManager.load_structure(filepath)
+
+            if loaded_structure:
+                self.data_structure = loaded_structure
+                self.visual_area.set_data_structure(self.data_structure)
+                self.update_display()
+                self.status_label.setText(f"结构已加载: {os.path.basename(filepath)}")
+                self.play_click_sound()
+            else:
+                QMessageBox.warning(self, "加载失败", "无法加载数据结构文件")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载失败: {str(e)}")
+
+    def save_structure(self):
+        """保存数据结构到文件"""
+        if self.data_structure.is_empty():
+            QMessageBox.warning(self, "保存失败", "数据结构为空，无法保存")
+            return
+
+        try:
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "保存数据结构",
+                "",
+                "JSON Files (*.json);;All Files (*)"
+            )
+
+            if filename:
+                if not filename.endswith('.json'):
+                    filename += '.json'
+
+                from model import DataStructureManager
+                if DataStructureManager.save_structure(self.data_structure, filename):
+                    # 添加到最近文件列表
+                    self.add_to_recent_files(filename)
+                    QMessageBox.information(self, "保存成功", f"数据结构已保存到: {filename}")
+                    self.status_label.setText(f"结构已保存: {os.path.basename(filename)}")
+                else:
+                    QMessageBox.warning(self, "保存失败", "保存数据结构时发生错误")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
+
+    def load_structure(self):
+        """从文件加载数据结构"""
+        try:
+            filename, _ = QFileDialog.getOpenFileName(
+                self,
+                "打开数据结构",
+                "",
+                "JSON Files (*.json);;All Files (*)"
+            )
+
+            if filename:
+                from model import DataStructureManager
+                loaded_structure = DataStructureManager.load_structure(filename)
+
+                if loaded_structure:
+                    self.data_structure = loaded_structure
+                    self.visual_area.set_data_structure(self.data_structure)
+                    self.update_display()
+                    # 添加到最近文件列表
+                    self.add_to_recent_files(filename)
+                    self.status_label.setText(f"结构已加载: {os.path.basename(filename)}")
+                    QMessageBox.information(self, "加载成功", f"数据结构已从文件加载")
+                else:
+                    QMessageBox.warning(self, "加载失败", "无法加载数据结构文件")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载失败: {str(e)}")
 
 class StackVisualizer(BaseVisualizer):
-    def __init__(self, main_window=None):
-        super().__init__(main_window, "栈 (Stack) 可视化工具")
+    def __init__(self, main_window=None,lastwindow=None):
+        super().__init__(main_window, lastwindow,"栈 (Stack) 可视化工具")
         # 初始化栈
         self.data_structure = Stack()
         self.visual_area.set_data_structure(self.data_structure)  # 设置栈为可视化数据结构
@@ -752,6 +1091,9 @@ class StackVisualizer(BaseVisualizer):
         self.peek_btn.setEnabled(enabled)
         self.clear_btn.setEnabled(enabled)
         self.push_input.setEnabled(enabled)
+        self.save_btn.setEnabled(enabled)
+        self.load_btn.setEnabled(enabled)
+
 
     def execute_operation(self):
         try:
@@ -779,8 +1121,8 @@ class StackVisualizer(BaseVisualizer):
 
 
 class SequenceListVisualizer(BaseVisualizer):
-    def __init__(self, main_window=None):
-        super().__init__(main_window, "顺序表 (SequenceList) 可视化工具")
+    def __init__(self, main_window=None,lastwindow=None):
+        super().__init__(main_window, lastwindow,"顺序表 (SequenceList) 可视化工具")
         # 初始化顺序表
         self.data_structure = SequenceList()
         self.visual_area.set_data_structure(self.data_structure)
@@ -1125,6 +1467,9 @@ class SequenceListVisualizer(BaseVisualizer):
         self.search_input.setEnabled(enabled)
         self.delete_pos_input.setEnabled(enabled)
 
+        self.save_btn.setEnabled(enabled)
+        self.load_btn.setEnabled(enabled)
+
     def execute_operation(self):
         try:
             if self.current_operation == "insert":
@@ -1168,8 +1513,8 @@ class SequenceListVisualizer(BaseVisualizer):
             self.update_display()
 
 class LinkedListVisualizer(BaseVisualizer):
-    def __init__(self, main_window=None):
-        super().__init__(main_window, "链表 (LinkedList) 可视化工具")
+    def __init__(self, main_window=None,lastwindow=None):
+        super().__init__(main_window,lastwindow, "链表 (LinkedList) 可视化工具")
         # 初始化链表
         self.data_structure = LinkedList()
         self.visual_area.set_data_structure(self.data_structure)
@@ -1561,6 +1906,9 @@ class LinkedListVisualizer(BaseVisualizer):
         self.delete_pos.setEnabled(enabled)
         self.delete_val.setEnabled(enabled)
 
+        self.save_btn.setEnabled(enabled)
+        self.load_btn.setEnabled(enabled)
+
     def execute_operation(self):
         try:
             if self.current_operation == "head_insert":
@@ -1619,8 +1967,8 @@ class LinkedListVisualizer(BaseVisualizer):
 
 # 实现TreeVisualizer子类
 class BinaryTreeVisualizer(BaseVisualizer):
-    def __init__(self, main_window=None):
-        super().__init__(main_window, "二叉树可视化工具")
+    def __init__(self, main_window=None,lastwindow=None):
+        super().__init__(main_window, lastwindow,"二叉树可视化工具")
         self.data_structure = BinaryTree()
         self.visual_area.set_data_structure(self.data_structure)
         self.highlighted_node = None
@@ -1731,10 +2079,13 @@ class BinaryTreeVisualizer(BaseVisualizer):
         for btn in [self.btn_create_root, self.btn_add_left, self.btn_add_right, self.btn_clear, self.btn_traverse]:
             btn.setEnabled(enabled)
 
+        self.save_btn.setEnabled(enabled)
+        self.load_btn.setEnabled(enabled)
+
 
 class HuffmanTreeVisualizer(BaseVisualizer):
-    def __init__(self, main_window=None):
-        super().__init__(main_window, "哈夫曼树可视化工具")
+    def __init__(self, main_window=None,lastwindow=None):
+        super().__init__(main_window, lastwindow,"哈夫曼树可视化工具")
         self.data_structure = HuffmanTree()
         self.visual_area.set_data_structure(self.data_structure)
         self.highlighted_node = None
@@ -1820,6 +2171,8 @@ class HuffmanTreeVisualizer(BaseVisualizer):
     def set_buttons_enabled(self, enabled):
         for btn in [self.btn_build, self.btn_show_codes, self.btn_clear]:
             btn.setEnabled(enabled)
+        self.save_btn.setEnabled(enabled)
+        self.load_btn.setEnabled(enabled)
 
 
 def main():
@@ -1829,10 +2182,10 @@ def main():
         app.setStyle('Fusion')
 
         #window = SequenceListVisualizer()
-        #window = StackVisualizer()
+        window = StackVisualizer()
         #window=LinkedListVisualizer()
         #window=BinaryTreeVisualizer()
-        window=HuffmanTreeVisualizer()
+        #window=HuffmanTreeVisualizer()
         window.show()
 
         print("二叉树可视化工具启动成功")

@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton,
                              QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFrame,QMessageBox)
 from PyQt5.QtCore import Qt,QUrl
 from PyQt5.QtGui import QFont, QPixmap, QPalette, QBrush
-from PyQt5.QtMultimedia import QSoundEffect  # 用于音效播放
+from PyQt5.QtMultimedia import QSoundEffect
 
 import traceback
 
@@ -312,12 +312,11 @@ class LinearStructureWindow(QMainWindow):
 
     def go_to_stack(self):
         try:
-
-            self.stack_window = StackVisualizer(self.mainwindow)
+            # 确保传递了 self 作为 last_window
+            self.stack_window = StackVisualizer(self.mainwindow, self)  # 添加 self 作为 last_window
             self.stack_window.show()
             self.hide()
             print("栈可视化工具启动成功")
-
         except Exception as e:
             print(f"应用程序错误: {e}")
             traceback.print_exc()
@@ -325,7 +324,7 @@ class LinearStructureWindow(QMainWindow):
 
     def go_to_sequencelist(self):
         try:
-            self.sequencelist_window=SequenceListVisualizer(self.mainwindow)
+            self.sequencelist_window=SequenceListVisualizer(self.mainwindow,self)
             self.sequencelist_window.show()
             self.hide()
             print("顺序表可视化工具启动成功")
@@ -336,7 +335,7 @@ class LinearStructureWindow(QMainWindow):
 
     def go_to_linkedlist(self):
         try:
-            self.linkedlist_window=LinkedListVisualizer(self.mainwindow)
+            self.linkedlist_window=LinkedListVisualizer(self.mainwindow,self)
             self.linkedlist_window.show()
             self.hide()
             print("链表可视化工具启动成功")
@@ -484,7 +483,7 @@ class TreeStructureWindow(QMainWindow):
 
     def go_to_Binary_tree(self):
         try:
-            self.Binary_tree_window=BinaryTreeVisualizer(self.mainwindow)
+            self.Binary_tree_window=BinaryTreeVisualizer(self.mainwindow,self)
             self.Binary_tree_window.show()
             self.hide()
             print("二叉树可视化工具启动成功")

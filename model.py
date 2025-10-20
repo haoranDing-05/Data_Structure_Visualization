@@ -1,4 +1,23 @@
 from abc import ABC, abstractmethod
+import json
+import pickle
+
+
+class Serializable(ABC):
+    """可序列化接口"""
+
+    @abstractmethod
+    def to_dict(self):
+        """将对象转换为字典"""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, data):
+        """从字典创建对象"""
+        pass
+
+
 
 
 class LinearList(ABC):
@@ -33,7 +52,7 @@ class LinearList(ABC):
         return f"{self.__class__.__name__}对象，长度: {self.length()}"
 
 
-class SequenceList(LinearList):
+class SequenceList(LinearList,Serializable):
     """顺序表实现（基于Python列表）"""
 
     def __init__(self):
@@ -92,6 +111,18 @@ class SequenceList(LinearList):
         else:
             raise IndexError("索引超出范围")
 
+    def to_dict(self):
+        return {
+            'type': 'SequenceList',
+            'items': self.items.copy()
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        obj = cls()
+        obj.items = data['items'].copy()
+        return obj
+
 
 class Node:
     """链表节点类"""
@@ -104,7 +135,7 @@ class Node:
         return str(self.data)
 
 
-class LinkedList(LinearList):
+class LinkedList(LinearList,Serializable):
     """链表实现"""
 
     def __init__(self):
@@ -195,8 +226,26 @@ class LinkedList(LinearList):
         """支持索引访问"""
         return self.get(index)
 
+    def to_dict(self):
+        elements = []
+        current = self.head
+        while current:
+            elements.append(current.data)
+            current = current.next
 
-class Stack(SequenceList):
+        return {
+            'type': 'LinkedList',
+            'elements': elements
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        obj = cls()
+        for element in data['elements']:
+            obj.append(element)
+        return obj
+
+class Stack(SequenceList,Serializable):
     """栈类"""
 
     def push(self, item):
@@ -219,6 +268,18 @@ class Stack(SequenceList):
         """显示栈内容（从栈底到栈顶）"""
         print("栈内容:", self.items)
 
+    def to_dict(self):
+        return {
+            'type': 'Stack',
+            'items': self.items.copy()
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        obj = cls()
+        obj.items = data['items'].copy()
+        return obj
+
 
 class BinaryTreeNode:
     """二叉树节点类"""
@@ -233,7 +294,7 @@ class BinaryTreeNode:
         return str(self.data)
 
 
-class BinaryTree(LinearList):
+class BinaryTree(LinearList,Serializable):
     """二叉树的链式存储实现"""
 
     def __init__(self, root_data=None):
@@ -332,6 +393,37 @@ class BinaryTree(LinearList):
         parent_node.right_child = new_node
         new_node.parent = parent_node
         self._size += 1
+
+    def to_dict(self):
+        def node_to_dict(node):
+            if not node:
+                return None
+            return {
+                'data': node.data,
+                'left_child': node_to_dict(node.left_child),
+                'right_child': node_to_dict(node.right_child)
+            }
+
+        return {
+            'type': 'BinaryTree',
+            'root': node_to_dict(self.root),
+            'size': self._size
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        def dict_to_node(node_dict):
+            if not node_dict:
+                return None
+            node = BinaryTreeNode(node_dict['data'])
+            node.left_child = dict_to_node(node_dict['left_child'])
+            node.right_child = dict_to_node(node_dict['right_child'])
+            return node
+
+        obj = cls()
+        obj.root = dict_to_node(data['root'])
+        obj._size = data['size']
+        return obj
 
 
 class BinarySearchTree(BinaryTree):
@@ -445,7 +537,7 @@ class HuffmanNode(BinaryTreeNode):
         self.weight = weight  # 权重
 
 
-class HuffmanTree(BinaryTree):
+class HuffmanTree(BinaryTree,Serializable):
     """哈夫曼树实现"""
 
     def __init__(self, weight_dict=None):
@@ -519,6 +611,79 @@ class HuffmanTree(BinaryTree):
         print("哈夫曼编码:")
         for data, code in codes.items():
             print(f"{data}: {code}")
+
+    def to_dict(self):
+        def node_to_dict(node):
+            if not node:
+                return None
+            return {
+                'data': node.data,
+                'weight': node.weight,
+                'left_child': node_to_dict(node.left_child),
+                'right_child': node_to_dict(node.right_child)
+            }
+
+        return {
+            'type': 'HuffmanTree',
+            'root': node_to_dict(self.root),
+            'size': self._size
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        def dict_to_node(node_dict):
+            if not node_dict:
+                return None
+            node = HuffmanNode(node_dict['data'], node_dict['weight'])
+            node.left_child = dict_to_node(node_dict['left_child'])
+            node.right_child = dict_to_node(node_dict['right_child'])
+            return node
+
+        obj = cls()
+        obj.root = dict_to_node(data['root'])
+        obj._size = data['size']
+        return obj
+
+
+class DataStructureManager:
+    """数据结构管理器，负责保存和加载"""
+
+    @staticmethod
+    def save_structure(structure, filename):
+        """保存数据结构到文件"""
+        try:
+            data = structure.to_dict()
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"保存失败: {e}")
+            return False
+
+    @staticmethod
+    def load_structure(filename):
+        """从文件加载数据结构"""
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            structure_type = data.get('type')
+            if structure_type == 'SequenceList':
+                return SequenceList.from_dict(data)
+            elif structure_type == 'LinkedList':
+                return LinkedList.from_dict(data)
+            elif structure_type == 'Stack':
+                return Stack.from_dict(data)
+            elif structure_type == 'BinaryTree':
+                return BinaryTree.from_dict(data)
+            elif structure_type == 'HuffmanTree':
+                return HuffmanTree.from_dict(data)
+            else:
+                raise ValueError(f"不支持的数据结构类型: {structure_type}")
+
+        except Exception as e:
+            print(f"加载失败: {e}")
+            return None
 
 
 # 测试代码
