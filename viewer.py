@@ -9,7 +9,7 @@ import traceback
 
 from model import SequenceList
 
-from visualization import StackVisualizer, SequenceListVisualizer, LinkedListVisualizer,BinaryTreeVisualizer
+from visualization import StackVisualizer, SequenceListVisualizer, LinkedListVisualizer,BinaryTreeVisualizer,HuffmanTreeVisualizer
 
 
 class MainWindow(QMainWindow):
@@ -457,6 +457,24 @@ class TreeStructureWindow(QMainWindow):
         self.button_Binary_tree.clicked.connect(self.on_button_Binary_tree_clicked)
         button_layout1.addWidget(self.button_Binary_tree)
 
+        self.button_Huffman_tree = QPushButton("哈夫曼树")
+        self.button_Huffman_tree.setMinimumSize(150, 60)
+        self.button_Huffman_tree.setFont(QFont("SimHei", 12))
+        self.button_Huffman_tree.setStyleSheet("""
+                                    QPushButton {
+                                        background-color: rgba(60, 130, 255, 0.8);
+                                        color: white;
+                                        border-radius: 10px;
+                                        border: none;
+                                    }
+                                    QPushButton:hover {
+                                        background-color: rgba(60, 130, 255, 1.0);
+                                        transform: scale(1.05);
+                                    }
+                                """)
+        self.button_Huffman_tree.clicked.connect(self.on_button_Huffman_tree_clicked)
+        button_layout1.addWidget(self.button_Huffman_tree)
+
         # 将按钮布局添加到主布局
         main_layout.addLayout(button_layout1)
         main_layout.addLayout(button_layout2)
@@ -481,6 +499,14 @@ class TreeStructureWindow(QMainWindow):
         self.play_click_sound()
         self.go_to_Binary_tree()
 
+    def on_button_Huffman_tree_clicked(self):
+        """哈夫曼树按钮点击事件处理"""
+        print("button_Huffman_tree is clicked")
+        self.play_click_sound()
+        self.go_to_Huffman_tree()
+
+
+
     def go_to_Binary_tree(self):
         try:
             self.Binary_tree_window=BinaryTreeVisualizer(self.mainwindow,self)
@@ -491,6 +517,21 @@ class TreeStructureWindow(QMainWindow):
             print(f"应用程序错误:{e}")
             traceback.print_exc()
             QMessageBox.critical(self,"错误",f"打开二叉树可视化工具时出错:{e}")
+
+    def go_to_Huffman_tree(self):
+        try:
+            self.Huffman_tree_window=HuffmanTreeVisualizer(self.mainwindow,self)
+            self.Huffman_tree_window.show()
+            self.hide()
+            print("哈夫曼树可视化工具启动成功")
+        except Exception as e:
+            print(f"应用程序错误:{e}")
+            traceback.print_exc()
+            QMessageBox.critical(self, "错误", f"打开哈夫曼树可视化工具时出错:{e}")
+
+
+
+
 
     def init_sound_effects(self):
         self.click_sound=QSoundEffect()

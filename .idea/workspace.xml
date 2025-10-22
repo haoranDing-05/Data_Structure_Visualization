@@ -5,7 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="98bba44a-b0ad-4617-b858-8e8844be300a" name="更改" comment="1">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/1.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/2.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/4.json" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/model.py" beforeDir="false" afterPath="$PROJECT_DIR$/model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/recent_files.json" beforeDir="false" afterPath="$PROJECT_DIR$/recent_files.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/viewer.py" beforeDir="false" afterPath="$PROJECT_DIR$/viewer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/visualization.py" beforeDir="false" afterPath="$PROJECT_DIR$/visualization.py" afterDir="false" />
     </list>
@@ -60,7 +65,7 @@
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;new&quot;,
     &quot;last_opened_file_path&quot;: &quot;C:/pycharm/Pycharm Project/Data_Structure_Visualization&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
 }</component>
   <component name="SharedIndexes">

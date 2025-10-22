@@ -462,6 +462,20 @@ class BaseVisualizer(QWidget):
         self.main_window = main_window
         #保存上一级窗口引用
         self.last_window=last_window
+
+        # 数据结构类型映射
+        self.structure_type_mapping = {
+            "栈 (Stack) 可视化工具": "Stack",
+            "顺序表 (SequenceList) 可视化工具": "SequenceList",
+            "链表 (LinkedList) 可视化工具": "LinkedList",
+            "二叉树可视化工具": "BinaryTree",
+            "哈夫曼树可视化工具": "HuffmanTree"
+        }
+
+        # 当前数据结构类型
+        self.current_structure_type = self.structure_type_mapping.get(title, "")
+
+
         # 数据结构实例（由子类初始化）
         self.data_structure = None
         # 动画相关
@@ -517,7 +531,7 @@ class BaseVisualizer(QWidget):
         control_layout.addLayout(self._create_button_layout())
 
         # 文件操作布局
-        file_group=QGroupBox(f"{self.title.split('(')[0].strip()}操作")
+        file_group=QGroupBox("文件保存加载操作")
         file_layout = QVBoxLayout()
 
         # 保存/加载按钮行
@@ -592,8 +606,8 @@ class BaseVisualizer(QWidget):
         file_group.setLayout(file_layout)
         main_layout.addWidget(file_group)
 
-        # 返回按钮布局
-        button_return_layout = QHBoxLayout()
+        # 返回按钮
+        #button_return_layout = QHBoxLayout()
         self.button_return_main = QPushButton("返回主界面")
         self.button_return_main.setMinimumSize(150, 40)
         self.button_return_main.setFont(QFont("SimHei", 10))
@@ -609,7 +623,7 @@ class BaseVisualizer(QWidget):
             }
         """)
         self.button_return_main.clicked.connect(self.on_button_return_main_clicked)
-        button_return_layout.addWidget(self.button_return_main)
+        ##button_return_layout.addWidget(self.button_return_main)
 
 
         self.button_return=QPushButton("返回")
@@ -627,8 +641,8 @@ class BaseVisualizer(QWidget):
                     }
                 """)
         self.button_return.clicked.connect(self.on_button_return_clicked)
-        button_return_layout.addWidget(self.button_return)
-        button_return_layout.addStretch()
+        #button_return_layout.addWidget(self.button_return)
+        #button_return_layout.addStretch()
 
 
         # 速度控制
@@ -641,9 +655,11 @@ class BaseVisualizer(QWidget):
 
         speed_layout.addWidget(self.speed_slider)
         speed_layout.addWidget(QLabel("毫秒"))
+        speed_layout.addWidget(self.button_return)
+        speed_layout.addWidget(self.button_return_main)
         speed_layout.addStretch()
 
-        control_layout.addLayout(button_return_layout)
+        #control_layout.addLayout(button_return_layout)
         control_layout.addLayout(speed_layout)
         control_group.setLayout(control_layout)
         main_layout.addWidget(control_group)
@@ -775,7 +791,7 @@ class BaseVisualizer(QWidget):
             'path': filename,
             'name': os.path.basename(filename),
             'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'type': self.title.split('(')[0].strip()
+            'type': self.current_structure_type  # 确保使用当前可视化器的类型
         }
         self.recent_files.insert(0, file_info)
 
@@ -788,57 +804,69 @@ class BaseVisualizer(QWidget):
         self.update_recent_files_display()
 
     def update_recent_files_display(self):
-        """更新最近文件显示"""
+        """更新最近文件显示 - 只显示当前数据结构类型的文件"""
         # 清空现有显示
         for i in reversed(range(self.recent_list_layout.count())):
             widget = self.recent_list_layout.itemAt(i).widget()
             if widget:
                 widget.deleteLater()
 
-        if not self.recent_files:
-            no_files_label = QLabel("暂无最近保存的文件")
+        # 过滤出当前数据结构类型的文件
+        filtered_files = [f for f in self.recent_files if f.get('type') == self.current_structure_type]
+
+        print(f"调试信息: 当前类型={self.current_structure_type}, 过滤后文件数={len(filtered_files)}")  # 调试用
+
+        if not filtered_files:
+            no_files_label = QLabel(f"暂无最近保存的{self._get_structure_name()}文件")
             no_files_label.setStyleSheet("color: #666; font-style: italic; padding: 10px;")
             no_files_label.setAlignment(Qt.AlignCenter)
-            no_files_label.setMinimumHeight(60)  # 确保有足够高度显示
+            no_files_label.setMinimumHeight(60)
             self.recent_list_layout.addWidget(no_files_label)
             return
 
-        for file_info in self.recent_files:
+        for file_info in filtered_files:
             file_widget = self.create_recent_file_widget(file_info)
             self.recent_list_layout.addWidget(file_widget)
 
+    def _get_structure_name(self):
+        """获取数据结构的中文名称"""
+        name_mapping = {
+            "Stack": "栈",
+            "SequenceList": "顺序表",
+            "LinkedList": "链表",
+            "BinaryTree": "二叉树",
+            "HuffmanTree": "哈夫曼树"
+        }
+        return name_mapping.get(self.current_structure_type, "数据结构")
+
+    def _get_loaded_structure_name(self, loaded_type):
+        """获取已加载数据结构的中文名称"""
+        name_mapping = {
+            "Stack": "栈",
+            "SequenceList": "顺序表",
+            "LinkedList": "链表",
+            "BinaryTree": "二叉树",
+            "HuffmanTree": "哈夫曼树"
+        }
+        return name_mapping.get(loaded_type, "未知数据结构")
+
+
     def create_recent_file_widget(self, file_info):
-        """创建单个最近文件的小部件"""
+        """创建单个最近文件的小部件 - 修改为可点击加载"""
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(8, 6, 8, 6)
 
-        # 文件信息标签
+        # 文件信息标签 - 现在整个区域都可点击
+        structure_name = self._get_structure_name()
         file_label = QLabel(f"{file_info['name']} ({file_info['time']})")
         file_label.setStyleSheet("font-size: 9pt;")
-        file_label.setToolTip(f"路径: {file_info['path']}\n类型: {file_info['type']}")
-
-        # 加载按钮
-        load_btn = QPushButton("加载")
-        load_btn.setFixedSize(50, 25)
-        load_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #17a2b8;
-                color: white;
-                border-radius: 4px;
-                border: none;
-                font-size: 8pt;
-            }
-            QPushButton:hover {
-                background-color: #138496;
-            }
-        """)
-        load_btn.clicked.connect(lambda checked, path=file_info['path']: self.load_recent_file(path))
+        file_label.setToolTip(f"路径: {file_info['path']}\n类型: {structure_name}\n点击加载此文件")
 
         layout.addWidget(file_label)
         layout.addStretch()
-        layout.addWidget(load_btn)
 
+        # 设置widget的样式和鼠标悬停效果
         widget.setStyleSheet("""
             QWidget {
                 border: 1px solid #ddd;
@@ -848,10 +876,18 @@ class BaseVisualizer(QWidget):
             }
             QWidget:hover {
                 background-color: #e9ecef;
+                border: 1px solid #17a2b8;
             }
         """)
 
         widget.setMinimumHeight(35)  # 确保每个文件项有合适的高度
+
+        # 设置widget可点击，连接点击事件到加载函数
+        widget.mousePressEvent = lambda event: self.load_recent_file(file_info['path'])
+
+        # 添加鼠标悬停时的手型光标
+        widget.setCursor(Qt.PointingHandCursor)
+
         return widget
 
     def load_recent_file(self, filepath):
@@ -869,6 +905,30 @@ class BaseVisualizer(QWidget):
             loaded_structure = DataStructureManager.load_structure(filepath)
 
             if loaded_structure:
+                # 检查加载的数据结构类型是否匹配当前可视化器
+                loaded_type = type(loaded_structure).__name__
+                expected_type = self.current_structure_type
+
+                type_mapping = {
+                    'Stack': 'Stack',
+                    'SequenceList': 'SequenceList',
+                    'LinkedList': 'LinkedList',
+                    'BinaryTree': 'BinaryTree',
+                    'HuffmanTree': 'HuffmanTree'
+                }
+
+                actual_loaded_type = type_mapping.get(loaded_type, '')
+
+                if actual_loaded_type != expected_type:
+                    structure_name = self._get_structure_name()
+                    QMessageBox.warning(
+                        self,
+                        "类型不匹配",
+                        f"文件包含的数据结构类型与当前{structure_name}可视化器不匹配\n"
+                        f"请使用对应的可视化器打开此文件"
+                    )
+                    return
+
                 self.data_structure = loaded_structure
                 self.visual_area.set_data_structure(self.data_structure)
                 self.update_display()
@@ -937,7 +997,7 @@ class BaseVisualizer(QWidget):
             QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
 
     def load_structure(self):
-        """从文件加载数据结构"""
+        """从文件加载数据结构 - 添加类型检查"""
         try:
             filename, _ = QFileDialog.getOpenFileName(
                 self,
@@ -951,6 +1011,36 @@ class BaseVisualizer(QWidget):
                 loaded_structure = DataStructureManager.load_structure(filename)
 
                 if loaded_structure:
+                    # 检查加载的数据结构类型是否匹配当前可视化器
+                    loaded_type = type(loaded_structure).__name__
+                    expected_type = self.current_structure_type
+
+                    # 更严格的类型映射
+                    type_mapping = {
+                        'Stack': 'Stack',
+                        'SequenceList': 'SequenceList',
+                        'LinkedList': 'LinkedList',
+                        'BinaryTree': 'BinaryTree',
+                        'HuffmanTree': 'HuffmanTree'
+                    }
+
+                    actual_loaded_type = type_mapping.get(loaded_type, '')
+
+                    print(f"调试信息: 加载类型={loaded_type}, 期望类型={expected_type}")  # 调试用
+
+                    if actual_loaded_type != expected_type:
+                        structure_name = self._get_structure_name()
+                        loaded_structure_name = self._get_loaded_structure_name(loaded_type)
+                        QMessageBox.warning(
+                            self,
+                            "类型不匹配",
+                            f"无法加载文件！\n\n"
+                            f"当前可视化器: {structure_name}\n"
+                            f"文件数据结构: {loaded_structure_name}\n\n"
+                            f"请使用对应的可视化器打开此文件"
+                        )
+                        return
+
                     self.data_structure = loaded_structure
                     self.visual_area.set_data_structure(self.data_structure)
                     self.update_display()
@@ -1005,6 +1095,7 @@ class StackVisualizer(BaseVisualizer):
         button_layout.addWidget(self.peek_btn)
         button_layout.addWidget(self.clear_btn)
         button_layout.addStretch()
+    
         return button_layout
 
     def _update_status_text(self):
@@ -1138,7 +1229,7 @@ class SequenceListVisualizer(BaseVisualizer):
         self.insert_input_val = QLineEdit()
         self.insert_input_val.setPlaceholderText("输入元素值")
         self.insert_input_pos = QLineEdit()
-        self.insert_input_pos.setPlaceholderText("输入位置")
+        self.insert_input_pos.setPlaceholderText("输入位置/默认为第0个")
         self.insert_btn = QPushButton("插入(Insert)")
         self.insert_btn.clicked.connect(self.handle_insert)
         self.insert_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; }")
@@ -1172,7 +1263,7 @@ class SequenceListVisualizer(BaseVisualizer):
         self.search_btn = QPushButton("查找(Find)")
         self.search_btn.clicked.connect(self.handle_search)
         self.search_btn.setStyleSheet("QPushButton { background-color: #FFC107; color: black; }")
-        self.delete_val_btn = QPushButton("按值删除")
+        self.delete_val_btn = QPushButton("按值删除(delete by val)")
         self.delete_val_btn.clicked.connect(self.handle_delete_by_value)
         self.delete_val_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; }")
 
@@ -1185,7 +1276,7 @@ class SequenceListVisualizer(BaseVisualizer):
         del_pos_layout = QHBoxLayout()
         self.delete_pos_input = QLineEdit()
         self.delete_pos_input.setPlaceholderText("输入删除位置")
-        self.delete_pos_btn = QPushButton("按位置删除")
+        self.delete_pos_btn = QPushButton("按位置删除(delete by pos)")
         self.delete_pos_btn.clicked.connect(self.handle_delete_by_position)
         self.delete_pos_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; }")
 
@@ -1204,22 +1295,17 @@ class SequenceListVisualizer(BaseVisualizer):
     def _create_button_layout(self):
         button_layout = QHBoxLayout()
 
-        self.get_btn = QPushButton("获取元素(Get)")
-        self.get_btn.clicked.connect(self.handle_get)
-        self.get_btn.setStyleSheet("QPushButton { background-color: #9C27B0; color: white; }")
-
         self.clear_btn = QPushButton("清空(Clear)")
         self.clear_btn.clicked.connect(self.handle_clear)
         self.clear_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; }")
-
-        self.length_btn = QPushButton("长度(Length)")
-        self.length_btn.clicked.connect(self.handle_length)
-        self.length_btn.setStyleSheet("QPushButton { background-color: #795548; color: white; }")
-
-        button_layout.addWidget(self.get_btn)
-        button_layout.addWidget(self.length_btn)
+        #button_layout.addStretch()
         button_layout.addWidget(self.clear_btn)
-        button_layout.addStretch()
+
+
+        self.status_btn=QPushButton("状态信息(status)")
+        #self.status_btn.clicked.connect(self.handle_status)
+        self.status_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; }")
+        button_layout.addWidget(self.status_btn)
 
         return button_layout
 
@@ -1237,9 +1323,7 @@ class SequenceListVisualizer(BaseVisualizer):
             return
 
         if not pos_text:
-            QMessageBox.warning(self, "输入错误", "请输入要插入的位置")
-            self.insert_input_pos.setFocus()
-            return
+            pos_text=0     #若用户没有输入插入位置则默认在第0个插入
 
         try:
             pos = int(pos_text)
@@ -1390,35 +1474,6 @@ class SequenceListVisualizer(BaseVisualizer):
             self.status_label.setText(f"未找到元素: {value}")
             self.update_display()
 
-    def handle_get(self):
-        self.play_click_sound()
-        if self.data_structure.is_empty():
-            QMessageBox.warning(self, "操作错误", "顺序表为空，无法获取元素")
-            return
-
-        pos_text = self.modify_input_pos.text().strip()  # 复用修改的位置输入
-        if not pos_text:
-            QMessageBox.warning(self, "输入错误", "请输入要获取元素的位置")
-            self.modify_input_pos.setFocus()
-            return
-
-        try:
-            pos = int(pos_text)
-        except ValueError:
-            QMessageBox.warning(self, "输入错误", "位置必须是整数")
-            self.modify_input_pos.clear()
-            return
-
-        length = self.data_structure.length()
-        if pos < 0 or pos >= length:
-            QMessageBox.warning(self, "位置无效", f"位置必须在0到{length - 1}之间")
-            return
-
-        value = self.data_structure.get(pos)
-        self.highlighted_index = pos
-        self.status_label.setText(f"位置 {pos} 的元素是: {value}")
-        self.update_display()
-        QTimer.singleShot(2000, self.clear_highlight)
 
     def handle_clear(self):
         self.play_click_sound()
@@ -1436,11 +1491,6 @@ class SequenceListVisualizer(BaseVisualizer):
             self.status_label.setText("顺序表已清空")
             self.update_display()
 
-    def handle_length(self):
-        self.play_click_sound()
-        length = self.data_structure.length()
-        self.status_label.setText(f"顺序表长度: {length} 个元素")
-        self.update_display()
 
     def _update_status_text(self):
         length = self.data_structure.length()
@@ -1456,9 +1506,7 @@ class SequenceListVisualizer(BaseVisualizer):
         self.search_btn.setEnabled(enabled)
         self.delete_val_btn.setEnabled(enabled)
         self.delete_pos_btn.setEnabled(enabled)
-        self.get_btn.setEnabled(enabled)
         self.clear_btn.setEnabled(enabled)
-        self.length_btn.setEnabled(enabled)
 
         self.insert_input_val.setEnabled(enabled)
         self.insert_input_pos.setEnabled(enabled)
@@ -1623,22 +1671,16 @@ class LinkedListVisualizer(BaseVisualizer):
     def _create_button_layout(self):
         button_layout = QHBoxLayout()
 
-        self.get_btn = QPushButton("获取元素")
-        self.get_btn.clicked.connect(self.handle_get)
-        self.get_btn.setStyleSheet("QPushButton { background-color: #9C27B0; color: white; }")
-
         self.clear_btn = QPushButton("清空链表")
         self.clear_btn.clicked.connect(self.handle_clear)
         self.clear_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; }")
 
-        self.length_btn = QPushButton("链表长度")
-        self.length_btn.clicked.connect(self.handle_length)
-        self.length_btn.setStyleSheet("QPushButton { background-color: #795548; color: white; }")
+        self.status_btn = QPushButton("状态信息(status)")
+        # self.status_btn.clicked.connect(self.handle_status)
+        self.status_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; }")
 
-        button_layout.addWidget(self.get_btn)
-        button_layout.addWidget(self.length_btn)
         button_layout.addWidget(self.clear_btn)
-        button_layout.addStretch()
+        button_layout.addWidget(self.status_btn)
 
         return button_layout
 
@@ -1826,34 +1868,6 @@ class LinkedListVisualizer(BaseVisualizer):
             self.status_label.setText(f"未找到元素: {value}")
             self.update_display()
 
-    def handle_get(self):
-        self.play_click_sound()
-        if self.data_structure.is_empty():
-            QMessageBox.warning(self, "操作错误", "链表为空，无法获取元素")
-            return
-
-        pos_text = self.modify_pos.text().strip()
-        if not pos_text:
-            QMessageBox.warning(self, "输入错误", "请输入要获取元素的位置")
-            return
-
-        try:
-            pos = int(pos_text)
-        except ValueError:
-            QMessageBox.warning(self, "输入错误", "位置必须是整数")
-            return
-
-        length = self.data_structure.length()
-        if pos < 0 or pos >= length:
-            QMessageBox.warning(self, "位置无效", f"位置必须在0到{length-1}之间")
-            return
-
-        value = self.data_structure.get(pos)
-        self.highlighted_index = pos
-        self.status_label.setText(f"位置 {pos} 的元素是: {value}")
-        self.update_display()
-        QTimer.singleShot(2000, self.clear_highlight)
-
     def handle_clear(self):
         self.play_click_sound()
         if self.data_structure.is_empty():
@@ -1869,12 +1883,6 @@ class LinkedListVisualizer(BaseVisualizer):
             self.highlighted_index = -1
             self.status_label.setText("链表已清空")
             self.update_display()
-
-    def handle_length(self):
-        self.play_click_sound()
-        length = self.data_structure.length()
-        self.status_label.setText(f"链表长度: {length} 个元素")
-        self.update_display()
 
     def _update_status_text(self):
         length = self.data_structure.length()
@@ -2123,7 +2131,7 @@ class HuffmanTreeVisualizer(BaseVisualizer):
 
     def build_huffman_tree(self):
         try:
-            input_text = self.weight_input.text().strip()
+            input_text = self.weight_input.toPlainText().strip()
             if not input_text:
                 QMessageBox.warning(self, "输入错误", "请输入数据和权重")
                 return
@@ -2182,10 +2190,10 @@ def main():
         app.setStyle('Fusion')
 
         #window = SequenceListVisualizer()
-        window = StackVisualizer()
+        #window = StackVisualizer()
         #window=LinkedListVisualizer()
         #window=BinaryTreeVisualizer()
-        #window=HuffmanTreeVisualizer()
+        window=HuffmanTreeVisualizer()
         window.show()
 
         print("二叉树可视化工具启动成功")
