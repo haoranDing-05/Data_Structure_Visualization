@@ -685,6 +685,17 @@ class DataStructureManager:
             print(f"加载失败: {e}")
             return None
 
+    @staticmethod
+    def get_structure_type(filename):
+        """获取文件中数据结构的类型"""
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data.get('type')
+        except Exception as e:
+            print(f"获取结构类型失败: {e}")
+            return None
+
 
 # 测试代码
 if __name__ == "__main__":

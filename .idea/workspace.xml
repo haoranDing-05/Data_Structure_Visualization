@@ -5,8 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="98bba44a-b0ad-4617-b858-8e8844be300a" name="更改" comment="1">
-      <change beforePath="$PROJECT_DIR$/model.py" beforeDir="false" afterPath="$PROJECT_DIR$/model.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/viewer.py" beforeDir="false" afterPath="$PROJECT_DIR$/viewer.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/qianwen_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/visualization.py" beforeDir="false" afterPath="$PROJECT_DIR$/visualization.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -49,20 +49,21 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.LinearList.executor&quot;: &quot;Run&quot;,
-    &quot;Python.home_page.executor&quot;: &quot;Run&quot;,
-    &quot;Python.homepage.executor&quot;: &quot;Run&quot;,
-    &quot;Python.model.executor&quot;: &quot;Run&quot;,
-    &quot;Python.viewer.executor&quot;: &quot;Run&quot;,
-    &quot;Python.visualization.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;new&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/pycharm/Pycharm Project/Data_Structure_Visualization&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.LinearList.executor": "Run",
+    "Python.home_page.executor": "Run",
+    "Python.homepage.executor": "Run",
+    "Python.model.executor": "Run",
+    "Python.qianwen_api.executor": "Run",
+    "Python.viewer.executor": "Run",
+    "Python.visualization.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "new",
+    "last_opened_file_path": "C:/pycharm/Pycharm Project/Data_Structure_Visualization",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }
-}</component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
