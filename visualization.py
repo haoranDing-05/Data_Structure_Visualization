@@ -6,8 +6,8 @@ from msilib.schema import SelfReg
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox, QTextEdit, QGridLayout,
-                             QScrollArea)
-from PyQt5.QtCore import Qt, QTimer, QUrl,QPointF,QPoint
+                             QScrollArea, QInputDialog)
+from PyQt5.QtCore import Qt, QTimer, QUrl, QPointF, QPoint, QMetaObject, Q_ARG, pyqtSignal
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QBrush,QPolygonF
 from PyQt5.QtMultimedia import QSoundEffect
 from model import Stack, SequenceList, LinkedList,BinaryTree,BinarySearchTree,HuffmanTree,HuffmanNode,BinaryTreeNode
@@ -15,6 +15,9 @@ from PyQt5.QtWidgets import QFileDialog
 import os
 from datetime import datetime
 import json
+import threading
+from qianwen_api import QianWenAPI
+
 
 class VisualArea(QWidget):
     """通用数据结构可视化组件"""
@@ -86,8 +89,13 @@ class VisualArea(QWidget):
         area_width = self.width()
         area_height = self.height()
         total_width = length * self.cell_width + (length - 1) * self.cell_spacing
-        start_x = max(10, (area_width - total_width) // 2)  # 水平居中
-        start_y = (area_height - self.cell_height) // 2  # 垂直居中
+        # 水平方向始终居中（栈只需要固定水平位置）
+        start_x = max(10, (area_width - self.cell_width) // 2)  # 修改这里
+
+        # 垂直方向计算：栈底固定在可视区域垂直中心下方，元素向上堆叠
+        stack_height = length * self.cell_height + (length - 1) * self.cell_spacing
+        # 确保栈底位置适中，元素向上堆叠时整体居中
+        start_y = (area_height + stack_height) // 2  # 修改这里
 
         # 判断是否为栈
         is_stack = isinstance(ds, Stack)
@@ -455,6 +463,8 @@ class VisualArea(QWidget):
 
 class BaseVisualizer(QWidget):
     """数据结构可视化父类"""
+    # 添加信号定义
+    response_received = pyqtSignal(str)
 
     def __init__(self, main_window=None,last_window=None, title="数据结构可视化工具"):
         super().__init__()
@@ -494,9 +504,22 @@ class BaseVisualizer(QWidget):
         self.recent_files_file = "recent_files.json"
         self.load_recent_files()
 
+        # AI相关配置
+        self.qianwen_api = None
+        self.ai_config_btn = None  # 初始化AI配置按钮
+        self.ai_group = None  # 初始化AI分组
+        self.ai_chat_display = None
+        self.ai_input = None
+        self.ai_send_btn = None
+
+        # 连接信号到槽函数
+        self.response_received.connect(self._update_ai_response)
+
         self.init_ui()
         self.update_recent_files_display()
         self.init_sound_effects()
+
+
 
     def init_sound_effects(self):
         self.click_sound = QSoundEffect()
@@ -644,14 +667,29 @@ class BaseVisualizer(QWidget):
         #button_return_layout.addWidget(self.button_return)
         #button_return_layout.addStretch()
 
-
-        # 速度控制
+        # 速度控制布局 - 修改此处添加AI配置按钮
         speed_layout = QHBoxLayout()
         speed_layout.addWidget(QLabel("动画速度:"))
         self.speed_slider = QLineEdit(str(self.animation_speed))
         self.speed_slider.setMaximumWidth(80)
         self.speed_slider.setToolTip("单位: 毫秒 (100-2000)")
         self.speed_slider.returnPressed.connect(self.update_speed)
+
+        # 添加AI配置按钮
+        self.ai_config_btn = QPushButton("AI助手配置")
+        self.ai_config_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #9c27b0;
+                    color: white;
+                    border-radius: 8px;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background-color: #7b1fa2;
+                }
+            """)
+        self.ai_config_btn.clicked.connect(self.show_ai_config_dialog)
+        speed_layout.addWidget(self.ai_config_btn)  # 添加AI按钮到速度布局
 
         speed_layout.addWidget(self.speed_slider)
         speed_layout.addWidget(QLabel("毫秒"))
@@ -671,7 +709,7 @@ class BaseVisualizer(QWidget):
         visual_layout.addWidget(self.visual_area)
         visual_group.setLayout(visual_layout)
         main_layout.addWidget(visual_group)
-
+        main_layout.addWidget(self.ai_group)
         # 状态信息
         self.status_label = QLabel("就绪 - 结构为空")
         self.status_label.setStyleSheet("""
@@ -685,6 +723,34 @@ class BaseVisualizer(QWidget):
         """)
         self.status_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(self.status_label)
+
+        main_layout.addWidget(visual_group)
+
+        # 添加AI助手区域
+        self.ai_group = QGroupBox("AI助手")
+        ai_layout = QVBoxLayout()
+
+        # 对话显示区域
+        self.ai_chat_display = QTextEdit()
+        self.ai_chat_display.setReadOnly(True)
+        self.ai_chat_display.setStyleSheet("background-color: #ffffff;")
+
+        # 输入区域
+        input_layout = QHBoxLayout()
+        self.ai_input = QLineEdit()
+        self.ai_input.setPlaceholderText("输入你的问题，例如：如何在栈中插入元素？")
+        self.ai_send_btn = QPushButton("发送")
+        self.ai_send_btn.setEnabled(False)  # 初始禁用，配置API后启用
+        self.ai_send_btn.clicked.connect(self.send_ai_request)
+
+        input_layout.addWidget(self.ai_input)
+        input_layout.addWidget(self.ai_send_btn)
+
+        ai_layout.addWidget(self.ai_chat_display)
+        ai_layout.addLayout(input_layout)
+        self.ai_group.setLayout(ai_layout)
+        main_layout.addWidget(self.ai_group)  # 将AI区域添加到主布局
+
 
         self.setLayout(main_layout)
         self.setWindowTitle(self.title)
@@ -1053,6 +1119,120 @@ class BaseVisualizer(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载失败: {str(e)}")
+
+    def init_ai_components(self):
+        """初始化AI相关组件"""
+        # 创建AI配置对话框按钮
+        self.ai_config_btn = QPushButton("AI助手配置")
+        self.ai_config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9c27b0;
+                color: white;
+                border-radius: 8px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #7b1fa2;
+            }
+        """)
+        self.ai_config_btn.clicked.connect(self.show_ai_config_dialog)
+
+        # AI交互区域
+        self.ai_group = QGroupBox("AI助手")
+        ai_layout = QVBoxLayout()
+
+        # 对话显示区域
+        self.ai_chat_display = QTextEdit()
+        self.ai_chat_display.setReadOnly(True)
+        self.ai_chat_display.setStyleSheet("background-color: #ffffff;")
+
+        # 输入区域
+        input_layout = QHBoxLayout()
+        self.ai_input = QLineEdit()
+        self.ai_input.setPlaceholderText("输入你的问题，例如：如何在链表中插入元素？")
+        self.ai_send_btn = QPushButton("发送")
+        self.ai_send_btn.setEnabled(False)  # 初始禁用，配置API后启用
+        self.ai_send_btn.clicked.connect(self.send_ai_request)
+
+        input_layout.addWidget(self.ai_input)
+        input_layout.addWidget(self.ai_send_btn)
+
+        ai_layout.addWidget(self.ai_chat_display)
+        ai_layout.addLayout(input_layout)
+        self.ai_group.setLayout(ai_layout)
+
+        # 将AI配置按钮添加到现有布局中（在speed_layout中）
+        # 找到原speed_layout的定义位置，添加以下代码
+        # speed_layout.addWidget(self.ai_config_btn)
+
+        # 将AI助手区域添加到主布局
+        # 在main_layout.addWidget(visual_group)之后添加
+        # main_layout.addWidget(self.ai_group)
+
+    # AI配置对话框
+    def show_ai_config_dialog(self):
+        """显示AI配置对话框"""
+        api_key, ok = QInputDialog.getText(
+            self, "通义千问API配置", "请输入你的API Key:"
+        )
+
+        if ok and api_key:
+            self.qianwen_api = QianWenAPI(api_key.strip())
+            self.ai_send_btn.setEnabled(True)
+            self.status_label.setText("AI助手已配置完成，可以开始提问")
+            self.ai_chat_display.append("系统消息：AI助手已就绪，有什么可以帮助你的吗？")
+
+    # 发送AI请求
+    def send_ai_request(self):
+        """发送请求到AI"""
+        question = self.ai_input.text().strip()
+        if not question:
+            return
+
+        # 显示用户问题
+        self.ai_chat_display.append(f"你：{question}")
+        self.ai_input.clear()
+        self.ai_send_btn.setEnabled(False)
+        self.status_label.setText("AI正在思考，请稍候...")
+
+        # 在新线程中调用API，避免界面卡顿
+        threading.Thread(
+            target=self._process_ai_request,
+            args=(question,),
+            daemon=True
+        ).start()
+
+    def _process_ai_request(self, question):
+        """处理AI请求（在后台线程中运行）"""
+        if not self.qianwen_api:
+            # 使用信号槽机制代替直接调用
+            self.response_received.emit("请先配置API Key")
+            return
+
+        # 根据当前数据结构类型生成更精准的提示
+        structure_name = self.title.split('(')[0].strip()
+        prompt = f"""
+        你是一个{structure_name}可视化工具的助手。请回答关于{structure_name}的问题。
+        问题：{question}
+        请提供简洁明了的回答，必要时可以包含代码示例。
+        """
+
+        try:
+            response = self.qianwen_api.get_response(prompt)
+            print("回答是" + response)
+            # 发送信号而不是直接调用UI方法
+            self.response_received.emit(response)
+        except Exception as e:
+            self.response_received.emit(f"处理请求时出错: {str(e)}")
+
+    # 更新AI响应
+    def _update_ai_response(self, response):
+        """更新AI响应到UI"""
+        self.ai_chat_display.append(f"AI助手：{response}")
+        self.ai_chat_display.append("---")
+        self.ai_send_btn.setEnabled(True)
+        self.status_label.setText("就绪")
+
 
 class StackVisualizer(BaseVisualizer):
     def __init__(self, main_window=None,lastwindow=None):
@@ -2190,10 +2370,10 @@ def main():
         app.setStyle('Fusion')
 
         #window = SequenceListVisualizer()
-        #window = StackVisualizer()
+        window = StackVisualizer()
         #window=LinkedListVisualizer()
         #window=BinaryTreeVisualizer()
-        window=HuffmanTreeVisualizer()
+        #window=HuffmanTreeVisualizer()
         window.show()
 
         print("二叉树可视化工具启动成功")
