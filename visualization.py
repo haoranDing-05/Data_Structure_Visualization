@@ -504,16 +504,16 @@ class BaseVisualizer(QWidget):
         self.recent_files_file = "recent_files.json"
         self.load_recent_files()
 
-        # AI相关配置
-        self.qianwen_api = None
-        self.ai_config_btn = None  # 初始化AI配置按钮
-        self.ai_group = None  # 初始化AI分组
-        self.ai_chat_display = None
-        self.ai_input = None
-        self.ai_send_btn = None
+        # # AI相关配置
+        # self.qianwen_api = None
+        # self.ai_config_btn = None  # 初始化AI配置按钮
+        # self.ai_group = None  # 初始化AI分组
+        # self.ai_chat_display = None
+        # self.ai_input = None
+        # self.ai_send_btn = None
 
-        # 连接信号到槽函数
-        self.response_received.connect(self._update_ai_response)
+        # # 连接信号到槽函数
+        # self.response_received.connect(self._update_ai_response)
 
         self.init_ui()
         self.update_recent_files_display()
@@ -675,21 +675,21 @@ class BaseVisualizer(QWidget):
         self.speed_slider.setToolTip("单位: 毫秒 (100-2000)")
         self.speed_slider.returnPressed.connect(self.update_speed)
 
-        # 添加AI配置按钮
-        self.ai_config_btn = QPushButton("AI助手配置")
-        self.ai_config_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #9c27b0;
-                    color: white;
-                    border-radius: 8px;
-                    border: none;
-                }
-                QPushButton:hover {
-                    background-color: #7b1fa2;
-                }
-            """)
-        self.ai_config_btn.clicked.connect(self.show_ai_config_dialog)
-        speed_layout.addWidget(self.ai_config_btn)  # 添加AI按钮到速度布局
+        # # 添加AI配置按钮
+        # self.ai_config_btn = QPushButton("AI助手配置")
+        # self.ai_config_btn.setStyleSheet("""
+        #         QPushButton {
+        #             background-color: #9c27b0;
+        #             color: white;
+        #             border-radius: 8px;
+        #             border: none;
+        #         }
+        #         QPushButton:hover {
+        #             background-color: #7b1fa2;
+        #         }
+        #     """)
+        # self.ai_config_btn.clicked.connect(self.show_ai_config_dialog)
+        # speed_layout.addWidget(self.ai_config_btn)  # 添加AI按钮到速度布局
 
         speed_layout.addWidget(self.speed_slider)
         speed_layout.addWidget(QLabel("毫秒"))
@@ -709,7 +709,7 @@ class BaseVisualizer(QWidget):
         visual_layout.addWidget(self.visual_area)
         visual_group.setLayout(visual_layout)
         main_layout.addWidget(visual_group)
-        main_layout.addWidget(self.ai_group)
+        #main_layout.addWidget(self.ai_group)
         # 状态信息
         self.status_label = QLabel("就绪 - 结构为空")
         self.status_label.setStyleSheet("""
@@ -726,30 +726,30 @@ class BaseVisualizer(QWidget):
 
         main_layout.addWidget(visual_group)
 
-        # 添加AI助手区域
-        self.ai_group = QGroupBox("AI助手")
-        ai_layout = QVBoxLayout()
+        # # 添加AI助手区域
+        # self.ai_group = QGroupBox("AI助手")
+        # ai_layout = QVBoxLayout()
+        #
+        # # 对话显示区域
+        # self.ai_chat_display = QTextEdit()
+        # self.ai_chat_display.setReadOnly(True)
+        # self.ai_chat_display.setStyleSheet("background-color: #ffffff;")
 
-        # 对话显示区域
-        self.ai_chat_display = QTextEdit()
-        self.ai_chat_display.setReadOnly(True)
-        self.ai_chat_display.setStyleSheet("background-color: #ffffff;")
-
-        # 输入区域
-        input_layout = QHBoxLayout()
-        self.ai_input = QLineEdit()
-        self.ai_input.setPlaceholderText("输入你的问题，例如：如何在栈中插入元素？")
-        self.ai_send_btn = QPushButton("发送")
-        self.ai_send_btn.setEnabled(False)  # 初始禁用，配置API后启用
-        self.ai_send_btn.clicked.connect(self.send_ai_request)
-
-        input_layout.addWidget(self.ai_input)
-        input_layout.addWidget(self.ai_send_btn)
-
-        ai_layout.addWidget(self.ai_chat_display)
-        ai_layout.addLayout(input_layout)
-        self.ai_group.setLayout(ai_layout)
-        main_layout.addWidget(self.ai_group)  # 将AI区域添加到主布局
+        # # 输入区域
+        # input_layout = QHBoxLayout()
+        # self.ai_input = QLineEdit()
+        # self.ai_input.setPlaceholderText("输入你的问题，例如：如何在栈中插入元素？")
+        # self.ai_send_btn = QPushButton("发送")
+        # self.ai_send_btn.setEnabled(False)  # 初始禁用，配置API后启用
+        # self.ai_send_btn.clicked.connect(self.send_ai_request)
+        #
+        # input_layout.addWidget(self.ai_input)
+        # input_layout.addWidget(self.ai_send_btn)
+        #
+        # ai_layout.addWidget(self.ai_chat_display)
+        # ai_layout.addLayout(input_layout)
+        # self.ai_group.setLayout(ai_layout)
+        # main_layout.addWidget(self.ai_group)  # 将AI区域添加到主布局
 
 
         self.setLayout(main_layout)
@@ -1120,118 +1120,120 @@ class BaseVisualizer(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载失败: {str(e)}")
 
-    def init_ai_components(self):
-        """初始化AI相关组件"""
-        # 创建AI配置对话框按钮
-        self.ai_config_btn = QPushButton("AI助手配置")
-        self.ai_config_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #9c27b0;
-                color: white;
-                border-radius: 8px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #7b1fa2;
-            }
-        """)
-        self.ai_config_btn.clicked.connect(self.show_ai_config_dialog)
+    # def init_ai_components(self):
+    #     """初始化AI相关组件"""
+    #     # 创建AI配置对话框按钮
+    #     self.ai_config_btn = QPushButton("AI助手配置")
+    #     self.ai_config_btn.setStyleSheet("""
+    #         QPushButton {
+    #             background-color: #9c27b0;
+    #             color: white;
+    #             border-radius: 8px;
+    #             border: none;
+    #         }
+    #         QPushButton:hover {
+    #             background-color: #7b1fa2;
+    #         }
+    #     """)
+    #     self.ai_config_btn.clicked.connect(self.show_ai_config_dialog)
+    #
+    #     # AI交互区域
+    #     self.ai_group = QGroupBox("AI助手")
+    #     ai_layout = QVBoxLayout()
+    #
+    #     # 对话显示区域
+    #     self.ai_chat_display = QTextEdit()
+    #     self.ai_chat_display.setReadOnly(True)
+    #     self.ai_chat_display.setStyleSheet("background-color: #ffffff;")
+    #
+    #     # 输入区域
+    #     input_layout = QHBoxLayout()
+    #     self.ai_input = QLineEdit()
+    #     self.ai_input.setPlaceholderText("输入你的问题，例如：如何在链表中插入元素？")
+    #     self.ai_send_btn = QPushButton("发送")
+    #     self.ai_send_btn.setEnabled(False)  # 初始禁用，配置API后启用
+    #     self.ai_send_btn.clicked.connect(self.send_ai_request)
+    #
+    #     input_layout.addWidget(self.ai_input)
+    #     input_layout.addWidget(self.ai_send_btn)
+    #
+    #     ai_layout.addWidget(self.ai_chat_display)
+    #     ai_layout.addLayout(input_layout)
+    #     self.ai_group.setLayout(ai_layout)
+    #
+    #     # 将AI配置按钮添加到现有布局中（在speed_layout中）
+    #     # 找到原speed_layout的定义位置，添加以下代码
+    #     # speed_layout.addWidget(self.ai_config_btn)
+    #
+    #     # 将AI助手区域添加到主布局
+    #     # 在main_layout.addWidget(visual_group)之后添加
+    #     # main_layout.addWidget(self.ai_group)
+    #
+    # # AI配置对话框
+    # def show_ai_config_dialog(self):
+    #     """显示AI配置对话框"""
+    #     api_key, ok = QInputDialog.getText(
+    #         self, "通义千问API配置", "请输入你的API Key:"
+    #     )
+    #
+    #     if ok and api_key:
+    #         self.qianwen_api = QianWenAPI(api_key.strip())
+    #         self.ai_send_btn.setEnabled(True)
+    #         self.status_label.setText("AI助手已配置完成，可以开始提问")
+    #         self.ai_chat_display.append("系统消息：AI助手已就绪，有什么可以帮助你的吗？")
+    #
+    # # 发送AI请求
+    # def send_ai_request(self):
+    #     """发送请求到AI"""
+    #     question = self.ai_input.text().strip()
+    #     if not question:
+    #         return
+    #
+    #     # 显示用户问题
+    #     self.ai_chat_display.append(f"你：{question}")
+    #     self.ai_input.clear()
+    #     self.ai_send_btn.setEnabled(False)
+    #     self.status_label.setText("AI正在思考，请稍候...")
+    #
+    #     # 在新线程中调用API，避免界面卡顿
+    #     threading.Thread(
+    #         target=self._process_ai_request,
+    #         args=(question,),
+    #         daemon=True
+    #     ).start()
+    #
+    # def _process_ai_request(self, question):
+    #     """处理AI请求（在后台线程中运行）"""
+    #     if not self.qianwen_api:
+    #         # 使用信号槽机制代替直接调用
+    #         self.response_received.emit("请先配置API Key")
+    #         return
+    #
+    #     # 根据当前数据结构类型生成更精准的提示
+    #     structure_name = self.title.split('(')[0].strip()
+    #     prompt = f"""
+    #     你是一个{structure_name}可视化工具的助手。请回答关于{structure_name}的问题。
+    #     问题：{question}
+    #     请提供简洁明了的回答，必要时可以包含代码示例。
+    #     """
+    #
+    #     try:
+    #         response = self.qianwen_api.get_response(prompt)
+    #         print("回答是" + response)
+    #         # 发送信号而不是直接调用UI方法
+    #         self.response_received.emit(response)
+    #     except Exception as e:
+    #         self.response_received.emit(f"处理请求时出错: {str(e)}")
+    #
+    # # 更新AI响应
+    # def _update_ai_response(self, response):
+    #     """更新AI响应到UI"""
+    #     self.ai_chat_display.append(f"AI助手：{response}")
+    #     self.ai_chat_display.append("---")
+    #     self.ai_send_btn.setEnabled(True)
+    #     self.status_label.setText("就绪")
 
-        # AI交互区域
-        self.ai_group = QGroupBox("AI助手")
-        ai_layout = QVBoxLayout()
 
-        # 对话显示区域
-        self.ai_chat_display = QTextEdit()
-        self.ai_chat_display.setReadOnly(True)
-        self.ai_chat_display.setStyleSheet("background-color: #ffffff;")
-
-        # 输入区域
-        input_layout = QHBoxLayout()
-        self.ai_input = QLineEdit()
-        self.ai_input.setPlaceholderText("输入你的问题，例如：如何在链表中插入元素？")
-        self.ai_send_btn = QPushButton("发送")
-        self.ai_send_btn.setEnabled(False)  # 初始禁用，配置API后启用
-        self.ai_send_btn.clicked.connect(self.send_ai_request)
-
-        input_layout.addWidget(self.ai_input)
-        input_layout.addWidget(self.ai_send_btn)
-
-        ai_layout.addWidget(self.ai_chat_display)
-        ai_layout.addLayout(input_layout)
-        self.ai_group.setLayout(ai_layout)
-
-        # 将AI配置按钮添加到现有布局中（在speed_layout中）
-        # 找到原speed_layout的定义位置，添加以下代码
-        # speed_layout.addWidget(self.ai_config_btn)
-
-        # 将AI助手区域添加到主布局
-        # 在main_layout.addWidget(visual_group)之后添加
-        # main_layout.addWidget(self.ai_group)
-
-    # AI配置对话框
-    def show_ai_config_dialog(self):
-        """显示AI配置对话框"""
-        api_key, ok = QInputDialog.getText(
-            self, "通义千问API配置", "请输入你的API Key:"
-        )
-
-        if ok and api_key:
-            self.qianwen_api = QianWenAPI(api_key.strip())
-            self.ai_send_btn.setEnabled(True)
-            self.status_label.setText("AI助手已配置完成，可以开始提问")
-            self.ai_chat_display.append("系统消息：AI助手已就绪，有什么可以帮助你的吗？")
-
-    # 发送AI请求
-    def send_ai_request(self):
-        """发送请求到AI"""
-        question = self.ai_input.text().strip()
-        if not question:
-            return
-
-        # 显示用户问题
-        self.ai_chat_display.append(f"你：{question}")
-        self.ai_input.clear()
-        self.ai_send_btn.setEnabled(False)
-        self.status_label.setText("AI正在思考，请稍候...")
-
-        # 在新线程中调用API，避免界面卡顿
-        threading.Thread(
-            target=self._process_ai_request,
-            args=(question,),
-            daemon=True
-        ).start()
-
-    def _process_ai_request(self, question):
-        """处理AI请求（在后台线程中运行）"""
-        if not self.qianwen_api:
-            # 使用信号槽机制代替直接调用
-            self.response_received.emit("请先配置API Key")
-            return
-
-        # 根据当前数据结构类型生成更精准的提示
-        structure_name = self.title.split('(')[0].strip()
-        prompt = f"""
-        你是一个{structure_name}可视化工具的助手。请回答关于{structure_name}的问题。
-        问题：{question}
-        请提供简洁明了的回答，必要时可以包含代码示例。
-        """
-
-        try:
-            response = self.qianwen_api.get_response(prompt)
-            print("回答是" + response)
-            # 发送信号而不是直接调用UI方法
-            self.response_received.emit(response)
-        except Exception as e:
-            self.response_received.emit(f"处理请求时出错: {str(e)}")
-
-    # 更新AI响应
-    def _update_ai_response(self, response):
-        """更新AI响应到UI"""
-        self.ai_chat_display.append(f"AI助手：{response}")
-        self.ai_chat_display.append("---")
-        self.ai_send_btn.setEnabled(True)
-        self.status_label.setText("就绪")
 
 
 class StackVisualizer(BaseVisualizer):
