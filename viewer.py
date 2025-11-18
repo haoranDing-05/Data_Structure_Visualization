@@ -28,7 +28,7 @@ class MainWindow(QMainWindow):
         # 创建带背景的中心部件
         central_frame = QFrame()
         self.setCentralWidget(central_frame)
-        self.set_background_image(central_frame, "C:/Users/dhrnb/Desktop/DataStructureVisualization/微信图片_20250922183759_13_117.jpg")  # 替换为你的背景图片路径
+        self.set_background_image(central_frame, "./DataStructureVisualization/微信图片_20250922183759_13_117.jpg")  # 替换为你的背景图片路径
 
         # 创建主布局（垂直布局）
         main_layout = QVBoxLayout(central_frame)
@@ -103,7 +103,7 @@ class MainWindow(QMainWindow):
 
     def init_sound_effects(self):
         self.click_sound=QSoundEffect()
-        self.click_sound.setSource(QUrl.fromLocalFile("C:/Users/dhrnb/Desktop/DataStructureVisualization/button_click.wav"))
+        self.click_sound.setSource(QUrl.fromLocalFile("./DataStructureVisualization/button_click.wav"))
         self.click_sound.setVolume(0.7)  # 设置音量（0.0-1.0）
 
     def play_click_sound(self):
@@ -176,7 +176,7 @@ class BubbleWidget(QFrame):
 
     def init_sound_effects(self):
         self.click_sound = QSoundEffect()
-        self.click_sound.setSource(QUrl.fromLocalFile("C:/Users/dhrnb/Desktop/DataStructureVisualization/燕小北welcome语音包.wav"))
+        self.click_sound.setSource(QUrl.fromLocalFile("./DataStructureVisualization/燕小北welcome语音包.wav"))
         self.click_sound.setVolume(0.7)  # 设置音量（0.0-1.0）
 
     def preload_sound(self):
@@ -396,7 +396,7 @@ class AI_Floating_Window(QMainWindow):
         self.setAttribute(Qt.WA_TranslucentBackground)
 
         # 加载图片 - 确保路径正确
-        ai_image_path = "C:/Users/dhrnb/Desktop/DataStructureVisualization/燕小北.png"
+        ai_image_path = "./DataStructureVisualization/燕小北.png"
 
         # 检查文件是否存在
         import os
@@ -595,7 +595,7 @@ class LinearStructureWindow(QMainWindow):
         #添加带背景图片的中心组件
         central_frame=QFrame()     #创建组件
         self.setCentralWidget(central_frame)
-        self.set_background_image(central_frame,"C:/Users/dhrnb/Desktop/DataStructureVisualization/微信图片_20250922183759_13_117.jpg")
+        self.set_background_image(central_frame,"./DataStructureVisualization/微信图片_20250922183759_13_117.jpg")
 
 
         main_layout=QVBoxLayout(central_frame)
@@ -774,7 +774,7 @@ class LinearStructureWindow(QMainWindow):
 
     def init_sound_effects(self):
         self.click_sound=QSoundEffect()
-        self.click_sound.setSource(QUrl.fromLocalFile("C:/Users/dhrnb/Desktop/DataStructureVisualization/button_click.wav"))
+        self.click_sound.setSource(QUrl.fromLocalFile("./DataStructureVisualization/button_click.wav"))
         self.click_sound.setVolume(0.7)  # 设置音量（0.0-1.0）
 
     def play_click_sound(self):
@@ -817,7 +817,7 @@ class TreeStructureWindow(QMainWindow):
         #添加带背景图片的中心组件
         central_frame=QFrame()     #创建组件
         self.setCentralWidget(central_frame)
-        self.set_background_image(central_frame,"C:/Users/dhrnb/Desktop/DataStructureVisualization/微信图片_20250922183759_13_117.jpg")
+        self.set_background_image(central_frame,"./DataStructureVisualization/微信图片_20250922183759_13_117.jpg")
 
 
         main_layout=QVBoxLayout(central_frame)
@@ -962,7 +962,7 @@ class TreeStructureWindow(QMainWindow):
 
     def init_sound_effects(self):
         self.click_sound=QSoundEffect()
-        self.click_sound.setSource(QUrl.fromLocalFile("C:/Users/dhrnb/Desktop/DataStructureVisualization/button_click.wav"))
+        self.click_sound.setSource(QUrl.fromLocalFile("./DataStructureVisualization/button_click.wav"))
         self.click_sound.setVolume(0.7)  # 设置音量（0.0-1.0）
 
     def play_click_sound(self):
