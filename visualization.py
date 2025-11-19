@@ -2,7 +2,7 @@ import sys
 import traceback
 import math
 from fileinput import filename
-from msilib.schema import SelfReg
+#from msilib.schema import SelfReg
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox, QTextEdit, QGridLayout,
@@ -24,7 +24,7 @@ class VisualArea(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(500)
+        self.setMinimumHeight(300)
         self.setStyleSheet("background-color: #f5f5f5; border: 1px solid #ddd;")
 
         # 核心数据
@@ -724,7 +724,7 @@ class BaseVisualizer(QWidget):
         self.status_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(self.status_label)
 
-        main_layout.addWidget(visual_group)
+        #main_layout.addWidget(visual_group)
 
         # # 添加AI助手区域
         # self.ai_group = QGroupBox("AI助手")
@@ -754,7 +754,7 @@ class BaseVisualizer(QWidget):
 
         self.setLayout(main_layout)
         self.setWindowTitle(self.title)
-        self.resize(700, 600)
+        self.resize(700, 100)
 
         # 初始更新
         self.update_display()
