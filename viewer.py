@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QApplication
 
 import traceback
 
-from model import SequenceList
+###from model import SequenceList
 from visualization import StackVisualizer, SequenceListVisualizer, LinkedListVisualizer,BinaryTreeVisualizer,HuffmanTreeVisualizer
 from qianwen_api import  QianWenAPI, AIAssistantThread  # 导入AI助手
 
