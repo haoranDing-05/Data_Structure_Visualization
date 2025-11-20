@@ -657,19 +657,19 @@ class TreeStructureWindow(QMainWindow):
         self.button_BST.setFont(QFont("SimHei", 12))
         self.button_BST.setStyleSheet("""
                                     QPushButton {
-                                        background-color: rgba(255, 152, 0, 0.8);
+                                        background-color: rgba(60, 130, 255, 0.8);
                                         color: white;
                                         border-radius: 10px;
                                         border: none;
                                     }
                                     QPushButton:hover {
-                                        background-color: rgba(255, 152, 0, 1.0);
+                                        background-color: rgba(60, 130, 255, 1.0);
                                         transform: scale(1.05);
                                     }
                                 """)
         self.button_BST.clicked.connect(self.on_button_BST_clicked)
         # 添加到第二行或其他合适位置
-        button_layout2.addWidget(self.button_BST)
+        button_layout1.addWidget(self.button_BST)
 
         self.button_return = QPushButton("返回主界面")
         self.button_return.setMinimumSize(150, 60)
