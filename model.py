@@ -18,8 +18,6 @@ class Serializable(ABC):
         pass
 
 
-
-
 class LinearList(ABC):
     """线性表抽象基类"""
 
@@ -52,7 +50,7 @@ class LinearList(ABC):
         return f"{self.__class__.__name__}对象，长度: {self.length()}"
 
 
-class SequenceList(LinearList,Serializable):
+class SequenceList(LinearList, Serializable):
     """顺序表实现（基于Python列表）"""
 
     def __init__(self):
@@ -135,7 +133,7 @@ class Node:
         return str(self.data)
 
 
-class LinkedList(LinearList,Serializable):
+class LinkedList(LinearList, Serializable):
     """链表实现"""
 
     def __init__(self):
@@ -245,7 +243,8 @@ class LinkedList(LinearList,Serializable):
             obj.append(element)
         return obj
 
-class Stack(SequenceList,Serializable):
+
+class Stack(SequenceList, Serializable):
     """栈类"""
 
     def push(self, item):
@@ -294,7 +293,7 @@ class BinaryTreeNode:
         return str(self.data)
 
 
-class BinaryTree(LinearList,Serializable):
+class BinaryTree(LinearList, Serializable):
     """二叉树的链式存储实现"""
 
     def __init__(self, root_data=None):
@@ -426,7 +425,7 @@ class BinaryTree(LinearList,Serializable):
         return obj
 
 
-class BinarySearchTree(BinaryTree):
+class BinarySearchTree(BinaryTree, Serializable):
     """二叉搜索树实现"""
 
     def __init__(self):
@@ -510,8 +509,10 @@ class BinarySearchTree(BinaryTree):
         else:
             # 找到中序后继（右子树最小值）
             successor = self._find_min_node(node.right_child)
+            # 这里为了可视化方便，我们只交换数据
             node.data = successor.data
-            # 删除后继节点
+
+            # 删除后继节点（后继节点最多只有一个右子节点）
             if successor.parent.left_child == successor:
                 successor.parent.left_child = successor.right_child
             else:
@@ -528,6 +529,20 @@ class BinarySearchTree(BinaryTree):
         self._inorder_traversal(self.root, inorder)
         print(f"二叉搜索树（中序遍历）: {inorder}")
 
+    def to_dict(self):
+        data = super().to_dict()
+        data['type'] = 'BinarySearchTree'
+        return data
+
+    @classmethod
+    def from_dict(cls, data):
+        # 复用BinaryTree的重建逻辑，但返回BST实例
+        temp = BinaryTree.from_dict(data)
+        obj = cls()
+        obj.root = temp.root
+        obj._size = temp._size
+        return obj
+
 
 class HuffmanNode(BinaryTreeNode):
     """哈夫曼树节点类（继承自二叉树节点，增加权重属性）"""
@@ -537,7 +552,7 @@ class HuffmanNode(BinaryTreeNode):
         self.weight = weight  # 权重
 
 
-class HuffmanTree(BinaryTree,Serializable):
+class HuffmanTree(BinaryTree, Serializable):
     """哈夫曼树实现"""
 
     def __init__(self, weight_dict=None):
@@ -676,6 +691,8 @@ class DataStructureManager:
                 return Stack.from_dict(data)
             elif structure_type == 'BinaryTree':
                 return BinaryTree.from_dict(data)
+            elif structure_type == 'BinarySearchTree':
+                return BinarySearchTree.from_dict(data)
             elif structure_type == 'HuffmanTree':
                 return HuffmanTree.from_dict(data)
             else:
@@ -695,30 +712,3 @@ class DataStructureManager:
         except Exception as e:
             print(f"获取结构类型失败: {e}")
             return None
-
-
-# 测试代码
-if __name__ == "__main__":
-    # 测试二叉树
-    print("=== 测试二叉树 ===")
-    bt = BinaryTree(1)
-    bt.insert_left(0, 2)
-    bt.insert_right(0, 3)
-    bt.insert_left(1, 4)
-    bt.display()
-
-    # 测试二叉搜索树
-    print("\n=== 测试二叉搜索树 ===")
-    bst = BinarySearchTree()
-    for num in [5, 3, 7, 2, 4, 6, 8]:
-        bst.insert(num)
-    bst.display()
-    print("删除元素3后:")
-    bst.delete(3)
-    bst.display()
-
-    # 测试哈夫曼树
-    print("\n=== 测试哈夫曼树 ===")
-    weights = {'a': 5, 'b': 9, 'c': 12, 'd': 13, 'e': 16, 'f': 45}
-    ht = HuffmanTree(weights)
-    ht.display()
