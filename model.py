@@ -659,6 +659,16 @@ class HuffmanTree(BinaryTree, Serializable):
         obj._size = data['size']
         return obj
 
+#HuffmanTree的结构体节点 用于存储和实现哈夫曼树的动画
+class HuffmanStructNode:
+    def __init__(self, data=None, weight=0, index=-1):
+        self.data = data  # 字符名称
+        self.weight = weight  # 权重
+        self.index = index  # 在数组中的自身下标
+        self.parent = -1  # 父节点下标，-1表示无
+        self.left = -1  # 左孩子下标，-1表示无
+        self.right = -1  # 右孩子下标，-1表示无
+
 
 class DataStructureManager:
     """数据结构管理器，负责保存和加载"""

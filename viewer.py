@@ -7,8 +7,6 @@ from PyQt5.QtMultimedia import QSoundEffect
 
 import traceback
 
-from model import SequenceList
-# 引入新增的 BinarySearchTreeVisualizer
 from visualization import StackVisualizer, SequenceListVisualizer, LinkedListVisualizer, BinaryTreeVisualizer, \
     HuffmanTreeVisualizer, BinarySearchTreeVisualizer
 from qianwen_api import QianWenAPI, AIAssistantThread
@@ -18,7 +16,11 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.init_sound_effects()
-        self.setWindowTitle("主界面")
+        #添加背景音乐
+
+
+
+        self.setWindowTitle("数据结构课设——数据结构可视化")
         self.setGeometry(100, 100, 640, 852)
 
         central_frame = QFrame()
@@ -118,12 +120,7 @@ class MainWindow(QMainWindow):
         widget.setAutoFillBackground(True)
 
 
-# ... (BubbleWidget, AI_Floating_Window, LinearStructureWindow code remains the same) ...
-# 省略 BubbleWidget, AI_Floating_Window, LinearStructureWindow 类代码，保持原样不变
-# 请在实际文件中保留这些类的原有代码
-
 class BubbleWidget(QFrame):
-    # ... 保持原代码 ...
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_sound_effects()
@@ -135,7 +132,6 @@ class BubbleWidget(QFrame):
         self.send_btn.setEnabled(False)
         self.welcome_shown = True
 
-    # ... 其余方法保持不变 ...
     def init_sound_effects(self):
         self.click_sound = QSoundEffect()
         self.click_sound.setSource(QUrl.fromLocalFile("./DataStructureVisualization/燕小北welcome语音包.wav"))
@@ -760,7 +756,7 @@ class TreeStructureWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
-    ai_window = AI_Floating_Window()
+    #ai_window = AI_Floating_Window()
     window.show()
-    ai_window.show()
+    #ai_window.show()
     sys.exit(app.exec_())
