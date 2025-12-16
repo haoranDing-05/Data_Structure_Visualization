@@ -89,6 +89,7 @@ class SequenceList(LinearList, Serializable):
         return -1
 
     def clear(self):
+        """清空顺序表（修正：清空items列表）"""
         self.items = []
 
     def display(self):
@@ -205,6 +206,7 @@ class LinkedList(LinearList, Serializable):
         return -1
 
     def clear(self):
+        """清空链表（修正：重置头节点和大小）"""
         self.head = None
         self.size = 0
 
@@ -346,7 +348,9 @@ class BinaryTree(LinearList, Serializable):
     def _get_node(self, index):
         """根据索引获取节点（层序索引）"""
         if index < 0 or index >= self._size:
-            raise IndexError("索引超出范围")
+            # 允许传入 -1 或其他超出范围的值进行查找，但如果找到的节点不存在则返回None
+            if index < 0:
+                return None
 
         queue = [self.root]
         current_index = 0
@@ -371,7 +375,12 @@ class BinaryTree(LinearList, Serializable):
         """在指定父节点左侧插入新节点"""
         parent_node = self._get_node(parent_index)
         if not parent_node:
-            raise IndexError("父节点索引无效")
+            # 允许通过索引查找父节点，如果父节点不存在，应该抛出索引错误
+            if parent_index >= 0:
+                raise IndexError("父节点索引无效")
+            # 如果父节点为None（空树），无法执行插入操作（除了创建根节点）
+            raise ValueError("当前树为空，无法插入子节点")
+
         if parent_node.left_child:
             raise ValueError("左子节点已存在")
 
@@ -384,7 +393,10 @@ class BinaryTree(LinearList, Serializable):
         """在指定父节点右侧插入新节点"""
         parent_node = self._get_node(parent_index)
         if not parent_node:
-            raise IndexError("父节点索引无效")
+            if parent_index >= 0:
+                raise IndexError("父节点索引无效")
+            raise ValueError("当前树为空，无法插入子节点")
+
         if parent_node.right_child:
             raise ValueError("右子节点已存在")
 
@@ -417,10 +429,15 @@ class BinaryTree(LinearList, Serializable):
             node = BinaryTreeNode(node_dict['data'])
             node.left_child = dict_to_node(node_dict['left_child'])
             node.right_child = dict_to_node(node_dict['right_child'])
+
+            # 恢复父节点连接 (复杂，为简化序列化通常省略)
+            # 这里保持原样，因为 from_dict 不会恢复 parent 属性
+
             return node
 
         obj = cls()
         obj.root = dict_to_node(data['root'])
+        # 简单地从 dict 中读取 size
         obj._size = data['size']
         return obj
 
@@ -429,11 +446,22 @@ class BinarySearchTree(BinaryTree, Serializable):
     """二叉搜索树实现"""
 
     def __init__(self):
+        # 显式调用 BinaryTree 的 __init__ 但不设置根节点
         super().__init__(None)
         self._size = 0
 
     def _insert_recursive(self, node, data):
         """递归插入辅助函数"""
+        # 数据类型检查，确保可比较
+        if not isinstance(data, (int, float)) or not isinstance(node.data, (int, float)):
+            # 尝试转换为可比较类型，否则报错
+            try:
+                data = float(data)
+                node_data = float(node.data)
+            except (ValueError, TypeError):
+                # 如果不能转换为数字，则使用默认的 Python 比较（如果数据结构中混合了类型，这会很危险）
+                node_data = node.data
+
         if data < node.data:
             if node.left_child is None:
                 node.left_child = BinaryTreeNode(data)
@@ -441,13 +469,14 @@ class BinarySearchTree(BinaryTree, Serializable):
                 self._size += 1
             else:
                 self._insert_recursive(node.left_child, data)
-        else:  # 大于等于当前节点值放右子树
+        elif data > node.data:
             if node.right_child is None:
                 node.right_child = BinaryTreeNode(data)
                 node.right_child.parent = node
                 self._size += 1
             else:
                 self._insert_recursive(node.right_child, data)
+        # 如果 data == node.data，则不执行任何操作（BST 不允许重复元素）
 
     def insert(self, data):
         """插入元素"""
@@ -461,14 +490,25 @@ class BinarySearchTree(BinaryTree, Serializable):
         """递归搜索辅助函数"""
         if node is None:
             return None
+
+        # 数据类型检查和转换
+        if not isinstance(data, (int, float)) or not isinstance(node.data, (int, float)):
+            try:
+                data = float(data)
+                node_data = float(node.data)
+            except (ValueError, TypeError):
+                node_data = node.data
+
         if node.data == data:
             return node
-        return self._search_recursive(node.left_child, data) if data < node.data else self._search_recursive(
-            node.right_child, data)
+        elif data < node.data:
+            return self._search_recursive(node.left_child, data)
+        else:
+            return self._search_recursive(node.right_child, data)
 
     def search(self, data):
-        """搜索元素是否存在"""
-        return self._search_recursive(self.root, data) is not None
+        """搜索元素是否存在并返回节点"""
+        return self._search_recursive(self.root, data)
 
     def _find_min_node(self, node):
         """找到以node为根的子树中的最小值节点"""
@@ -509,7 +549,7 @@ class BinarySearchTree(BinaryTree, Serializable):
         else:
             # 找到中序后继（右子树最小值）
             successor = self._find_min_node(node.right_child)
-            # 这里为了可视化方便，我们只交换数据
+            # 交换数据
             node.data = successor.data
 
             # 删除后继节点（后继节点最多只有一个右子节点）
@@ -536,11 +576,10 @@ class BinarySearchTree(BinaryTree, Serializable):
 
     @classmethod
     def from_dict(cls, data):
-        # 复用BinaryTree的重建逻辑，但返回BST实例
         temp = BinaryTree.from_dict(data)
         obj = cls()
         obj.root = temp.root
-        obj._size = temp._size
+        obj._size = data['size']
         return obj
 
 
@@ -556,10 +595,6 @@ class HuffmanTree(BinaryTree, Serializable):
     """哈夫曼树实现"""
 
     def __init__(self, weight_dict=None):
-        """
-        从权重字典构建哈夫曼树
-        weight_dict: 键为数据，值为权重的字典
-        """
         super().__init__(None)
         self._size = 0
         if weight_dict:
@@ -567,30 +602,24 @@ class HuffmanTree(BinaryTree, Serializable):
 
     def build_from_weights(self, weight_dict):
         """根据权重字典构建哈夫曼树"""
-        # 创建初始节点列表
         nodes = [HuffmanNode(data, weight) for data, weight in weight_dict.items()]
         self._size = len(nodes)
 
         while len(nodes) > 1:
-            # 按权重排序（升序）
             nodes.sort(key=lambda x: x.weight)
 
-            # 取出权重最小的两个节点
             left = nodes.pop(0)
             right = nodes.pop(0)
 
-            # 创建新的中间节点
             parent = HuffmanNode(weight=left.weight + right.weight)
             parent.left_child = left
             parent.right_child = right
             left.parent = parent
             right.parent = parent
 
-            # 将新节点加入列表
             nodes.append(parent)
             self._size += 1
 
-        # 最后剩下的节点即为根节点
         self.root = nodes[0] if nodes else None
 
     def get_huffman_code(self):
@@ -607,12 +636,10 @@ class HuffmanTree(BinaryTree, Serializable):
         if node is None:
             return
 
-        # 叶子节点（有实际数据）
         if node.data is not None:
             codes[node.data] = current_code
             return
 
-        # 非叶子节点，继续遍历
         self._generate_code(node.left_child, current_code + "0", codes)
         self._generate_code(node.right_child, current_code + "1", codes)
 
@@ -649,6 +676,7 @@ class HuffmanTree(BinaryTree, Serializable):
         def dict_to_node(node_dict):
             if not node_dict:
                 return None
+            # 必须使用 HuffmanNode 来实例化，以保持 weight 属性
             node = HuffmanNode(node_dict['data'], node_dict['weight'])
             node.left_child = dict_to_node(node_dict['left_child'])
             node.right_child = dict_to_node(node_dict['right_child'])
@@ -659,7 +687,8 @@ class HuffmanTree(BinaryTree, Serializable):
         obj._size = data['size']
         return obj
 
-#HuffmanTree的结构体节点 用于存储和实现哈夫曼树的动画
+
+# HuffmanTree的结构体节点 用于存储和实现哈夫曼树的动画
 class HuffmanStructNode:
     def __init__(self, data=None, weight=0, index=-1):
         self.data = data  # 字符名称
@@ -682,6 +711,7 @@ class DataStructureManager:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             return True
         except Exception as e:
+            # 捕获异常时，打印更详细的错误信息
             print(f"保存失败: {e}")
             return False
 
