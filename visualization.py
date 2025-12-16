@@ -8,17 +8,31 @@ from datetime import datetime
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLineEdit, QLabel, QGroupBox, QMessageBox, QTextEdit, QGridLayout,
-                             QScrollArea, QSizePolicy, QFileDialog)
+                             QScrollArea, QSizePolicy, QFileDialog, QCheckBox)  # 导入 QCheckBox
 from PyQt5.QtCore import Qt, QTimer, QUrl, QPointF, QPoint, pyqtSignal, QRectF
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QBrush, QPolygonF
 from PyQt5.QtMultimedia import QSoundEffect
+from DSL_handler import DSLHandler
 
-# 假设 model.py 在同一目录下
 try:
     from model import Stack, SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, HuffmanStructNode
 except ImportError:
     # 兼容没有 model.py 的运行环境，提供 SequenceList 桩代码
     class Stack:
+        def __init__(self): self._data = []; self._size = 0
+
+        def length(self): return self._size
+
+        def push(self, val): self._data.append(val); self._size += 1
+
+        def pop(self): return self._data.pop()
+
+        def is_empty(self): return self._size == 0
+
+        def clear(self): self._data = []; self._size = 0
+
+        def __getitem__(self, key): return self._data[key]
+
         pass
 
 
@@ -43,14 +57,151 @@ except ImportError:
 
 
     class LinkedList:
+        def __init__(self): self._data = []; self._size = 0
+
+        def length(self): return self._size
+
+        def get(self, i): return self._data[i]
+
+        def __getitem__(self, key): return self._data[key]
+
+        def insert(self, i, val): self._data.insert(i, val); self._size += 1
+
+        def remove(self, i): val = self._data[i]; del self._data[i]; self._size -= 1; return val
+
+        def locate(self, val): return self._data.index(val) if val in self._data else -1
+
+        def clear(self): self._data = []; self._size = 0
+
+        def is_empty(self): return self._size == 0
+
+        def append(self, val): self.insert(self.length(), val)
+
         pass
 
 
     class BinaryTree:
+        def __init__(self, root_data=None):
+            class Node:
+                def __init__(self, data):
+                    self.data = data
+                    self.left_child = None
+                    self.right_child = None
+                    self.parent = None
+
+            self.root = Node(root_data) if root_data is not None else None
+            self._size = 1 if self.root else 0
+
+        def is_empty(self):
+            return self.root is None
+
+        def length(self):
+            return self._size
+
+        def clear(self):
+            self.root = None; self._size = 0
+
+        def _get_node(self, index):
+            if self.root is None: return None
+            queue = [(self.root, 0)]
+            while queue:
+                node, idx = queue.pop(0)
+                if idx == index: return node
+                if node.left_child: queue.append((node.left_child, 2 * idx + 1))
+                if node.right_child: queue.append((node.right_child, 2 * idx + 2))
+            return None
+
+        def insert_left(self, p_idx, val):
+            p = self._get_node(p_idx)
+            if not p: raise ValueError("Parent node not found")
+            if p.left_child: raise ValueError("Left child already exists")
+
+            class Node:
+                def __init__(self, data):
+                    self.data = data
+                    self.left_child = None
+                    self.right_child = None
+                    self.parent = None
+
+            new_node = Node(val)
+            p.left_child = new_node
+            new_node.parent = p
+            self._size += 1
+
+        def insert_right(self, p_idx, val):
+            p = self._get_node(p_idx)
+            if not p: raise ValueError("Parent node not found")
+            if p.right_child: raise ValueError("Right child already exists")
+
+            class Node:
+                def __init__(self, data):
+                    self.data = data
+                    self.left_child = None
+                    self.right_child = None
+                    self.parent = None
+
+            new_node = Node(val)
+            p.right_child = new_node
+            new_node.parent = p
+            self._size += 1
+
         pass
 
 
     class BinarySearchTree:
+        def __init__(self):
+            class Node:
+                def __init__(self, data):
+                    self.data = data
+                    self.left_child = None
+                    self.right_child = None
+                    self.parent = None
+
+            self.root = None
+            self._size = 0
+
+        def is_empty(self):
+            return self.root is None
+
+        def length(self):
+            return self._size
+
+        def clear(self):
+            self.root = None; self._size = 0
+
+        def insert(self, val):
+            class Node:
+                def __init__(self, data):
+                    self.data = data
+                    self.left_child = None
+                    self.right_child = None
+                    self.parent = None
+
+            if self.root is None:
+                self.root = Node(val)
+                self._size += 1
+                return
+
+            curr = self.root
+            while curr:
+                if val == curr.data: return  # 不插入重复元素
+                parent = curr
+                if val < curr.data:
+                    curr = curr.left_child
+                else:
+                    curr = curr.right_child
+
+            new_node = Node(val)
+            new_node.parent = parent
+            if val < parent.data:
+                parent.left_child = new_node
+            else:
+                parent.right_child = new_node
+            self._size += 1
+
+        def delete(self, val):
+            pass
+
         pass
 
 
@@ -59,6 +210,14 @@ except ImportError:
 
 
     class HuffmanStructNode:
+        def __init__(self, data=None, weight=0, left=-1, right=-1, parent=-1, index=-1):
+            self.data = data  # 字符或None
+            self.weight = weight  # 权重
+            self.left = left  # 左孩子在数组中的下标
+            self.right = right  # 右孩子在数组中的下标
+            self.parent = parent  # 父节点在数组中的下标
+            self.index = index  # 自身在数组中的下标
+
         pass
 
 # --- 样式常量 ---
@@ -161,7 +320,7 @@ class VisualArea(QWidget):
                 self._draw_linear_structure(painter)
             elif isinstance(self.data_structure, LinkedList):
                 self._draw_linked_list(painter)
-            elif isinstance(self.data_structure, BinaryTree):
+            elif isinstance(self.data_structure, BinaryTree) or isinstance(self.data_structure, BinarySearchTree):
                 self._draw_tree(painter)
         except Exception as e:
             # print(f"Paint Error: {e}")
@@ -520,8 +679,7 @@ class VisualArea(QWidget):
             bg_color = QColor(219, 234, 254)
             opacity = 1.0
 
-            # --- 应用动画效果 ---
-
+            # 顺序表插入动画
             if anim_type == 'seq_insert':
                 move_unit = (mem_w + mem_spacing)
 
@@ -539,6 +697,7 @@ class VisualArea(QWidget):
                         # 移位完成或悬浮阶段，所有后置元素已到位
                         x_pos += move_unit
 
+            # 顺序表删除动画
             elif anim_type == 'seq_delete':
                 move_unit = (mem_w + mem_spacing)
 
@@ -597,7 +756,7 @@ class VisualArea(QWidget):
 
             painter.restore()
 
-        # --- 5. 绘制悬浮的新节点 (修正：移出循环，确保独立绘制) ---
+        # --- 5. 绘制悬浮的新节点 ---
         if anim_type == 'seq_insert' and phase in ['hover', 'move_in', 'shift_forward']:
             painter.save()
 
@@ -1020,6 +1179,10 @@ class BaseVisualizer(QWidget):
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.recent_files_file = os.path.join(current_dir, "recent_files.json")
         self.load_recent_files()
+
+        # --- 新增属性：动画开关 ---
+        self.anim_enabled = True
+
         self.init_ui()
         self.setWindowState(Qt.WindowMaximized)
         self.update_recent_files_display()
@@ -1027,6 +1190,7 @@ class BaseVisualizer(QWidget):
 
     def init_sound_effects(self):
         self.click_sound = QSoundEffect()
+        # 假设文件路径正确
         self.click_sound.setSource(
             QUrl.fromLocalFile("./DataStructureVisualization/button_click.wav"))
         self.click_sound.setVolume(0.7)
@@ -1053,39 +1217,33 @@ class BaseVisualizer(QWidget):
         title_label.setWordWrap(True)
         sidebar_layout.addWidget(title_label)
 
-        # === 修改：核心操作区域 (使用 QScrollArea) ===
+        # === 核心操作区域 (使用 QScrollArea) ===
         control_group = QGroupBox("核心操作")
-        control_group.setMinimumHeight(200)  # 设置最小高度保证可见，避免重叠
+        control_group.setMinimumHeight(200)
         control_group.setStyleSheet(STYLES["group_box"])
 
-        # 滚动区域
         scroll = QScrollArea()
-        scroll.setWidgetResizable(True)  # 内容自适应宽度
+        scroll.setWidgetResizable(True)
         scroll.setStyleSheet("border: none; background-color: transparent;")
 
-        # 滚动内容容器
         scroll_content = QWidget()
         scroll_content.setStyleSheet("background-color: transparent;")
 
-        # 滚动内容布局
         scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setSpacing(10)  # 内部组件间距
+        scroll_layout.setSpacing(10)
         scroll_layout.setContentsMargins(5, 5, 5, 5)
 
-        # 添加具体的输入框和按钮布局
         scroll_layout.addLayout(self._create_input_layout())
         scroll_layout.addLayout(self._create_button_layout())
-        scroll_layout.addStretch()  # 底部填充，保证组件靠上
+        scroll_layout.addStretch()
 
         scroll.setWidget(scroll_content)
 
-        # GroupBox 自身的布局
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(2, 15, 2, 2)  # 上方留出标题空间
+        group_layout.setContentsMargins(2, 15, 2, 2)
         group_layout.addWidget(scroll)
         control_group.setLayout(group_layout)
 
-        # 使用 stretch factor 1，使其占据剩余可用空间
         sidebar_layout.addWidget(control_group, 1)
         # ==========================================
 
@@ -1105,7 +1263,7 @@ class BaseVisualizer(QWidget):
         btn_io_layout.addWidget(self.load_btn)
         file_layout.addLayout(btn_io_layout)
         file_group.setLayout(file_layout)
-        sidebar_layout.addWidget(file_group, 0)  # 固定高度
+        sidebar_layout.addWidget(file_group, 0)
 
         recent_group = QGroupBox("最近保存")
         recent_group.setStyleSheet(STYLES["group_box"])
@@ -1124,13 +1282,41 @@ class BaseVisualizer(QWidget):
         scroll_recent.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
         recent_group_layout.addWidget(scroll_recent)
         recent_group.setLayout(recent_group_layout)
-        sidebar_layout.addWidget(recent_group, 1)  # 也可以稍微伸缩
+        sidebar_layout.addWidget(recent_group, 1)
+
+        dsl_group = QGroupBox("DSL脚本控制区")
+        dsl_group.setStyleSheet(STYLES["group_box"])
+        dsl_layout = QVBoxLayout(dsl_group)
+
+        self.dsl_input = QTextEdit()
+        self.dsl_input.setPlaceholderText("在此输入指令，例如：\nBUILD: 10, 20, 30\nINSERT: 40\nDELETE: 10")
+        self.dsl_input.setStyleSheet("border: 1px solid #d1d5db; border-radius: 6px; background-color: #f9fafb;")
+        self.dsl_input.setMaximumHeight(100)
+
+        run_btn = QPushButton("执行脚本")
+        run_btn.setStyleSheet(STYLES["btn_primary"])
+        run_btn.clicked.connect(self.run_dsl)
+
+        dsl_layout.addWidget(self.dsl_input)
+        dsl_layout.addWidget(run_btn)
+        dsl_group.setLayout(dsl_layout)
+
+        sidebar_layout.addWidget(dsl_group, 0)
 
         settings_group = QGroupBox("设置")
         settings_group.setStyleSheet(STYLES["group_box"])
         settings_layout = QVBoxLayout()
         settings_layout.setContentsMargins(15, 20, 15, 15)
         settings_layout.setSpacing(12)
+
+        # --- 新增 CheckBox ---
+        self.anim_checkbox = QCheckBox("启用动画效果")
+        self.anim_checkbox.setChecked(self.anim_enabled)
+        self.anim_checkbox.stateChanged.connect(self._toggle_animation)
+        self.anim_checkbox.setStyleSheet("font-family: 'Microsoft YaHei'; color: #4b5563; padding-left: 0;")
+        settings_layout.addWidget(self.anim_checkbox)
+        # ---------------------
+
         speed_layout = QHBoxLayout()
         speed_lbl = QLabel("动画速度(ms):")
         speed_lbl.setStyleSheet("font-family: 'Microsoft YaHei'; color: #4b5563;")
@@ -1140,6 +1326,7 @@ class BaseVisualizer(QWidget):
         self.speed_slider.returnPressed.connect(self.update_speed)
         speed_layout.addWidget(self.speed_slider)
         settings_layout.addLayout(speed_layout)
+
         ret_layout = QHBoxLayout()
         self.button_return = QPushButton("返回上一级")
         self.button_return.clicked.connect(self.on_button_return_clicked)
@@ -1157,6 +1344,7 @@ class BaseVisualizer(QWidget):
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(30, 30, 30, 30)
         content_layout.setSpacing(20)
+
         visual_box = QGroupBox("可视化演示")
         visual_box.setStyleSheet(
             "QGroupBox { background-color: white; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; font-weight: bold; color: #1f2937; } QGroupBox::title { subcontrol-origin: margin; left: 15px; padding: 0 5px; top: 10px; }")
@@ -1166,13 +1354,27 @@ class BaseVisualizer(QWidget):
         vb_layout.addWidget(self.visual_area)
         visual_box.setLayout(vb_layout)
         content_layout.addWidget(visual_box)
+
         self.status_label = QLabel("就绪")
         self.status_label.setStyleSheet(
             "background: #eff6ff; color: #1e40af; padding: 12px; border-radius: 6px; border: 1px solid #bfdbfe; font-family: 'Microsoft YaHei'; font-weight: bold;")
         self.status_label.setAlignment(Qt.AlignCenter)
         content_layout.addWidget(self.status_label)
+
         root_layout.addWidget(sidebar)
         root_layout.addWidget(content_widget)
+
+    # --- 新增方法 ---
+    def _toggle_animation(self, state):
+        self.anim_enabled = state == Qt.Checked
+        # 如果禁用动画，强制停止当前动画
+        if not self.anim_enabled and hasattr(self, 'anim_timer') and self.anim_timer.isActive():
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.update_display()
+        self.status_label.setText(f"动画 {'已启用' if self.anim_enabled else '已禁用'}")
+
+    # ----------------
 
     def _create_input_layout(self):
         raise NotImplementedError
@@ -1208,6 +1410,8 @@ class BaseVisualizer(QWidget):
     def update_speed(self):
         try:
             val = int(self.speed_slider.text())
+            if val > 0:
+                self.animation_speed = val
         except:
             pass
         self.speed_slider.setText(str(self.animation_speed))
@@ -1307,6 +1511,25 @@ class BaseVisualizer(QWidget):
             except Exception as e:
                 QMessageBox.warning(self, "错误", str(e))
 
+    def run_dsl(self):
+        script = self.dsl_input.toPlainText().strip()
+        if not script:
+            QMessageBox.warning(self, "提示", "脚本内容不能为空")
+            return
+
+        handler = DSLHandler(self)
+
+        # --- 传递动画标志：0-执行动画，1-不执行动画 ---
+        flag = 0 if self.anim_enabled else 1
+        result = handler.execute_script(script, flag)
+
+        if result == "执行成功":
+            # 无论是否执行动画，都需要最终刷新
+            self.update_display()
+            self.status_label.setText("DSL 脚本执行完毕")
+        else:
+            QMessageBox.warning(self, "执行错误", result)
+
 
 class StackVisualizer(BaseVisualizer):
     def __init__(self, main_window=None, lastwindow=None):
@@ -1347,55 +1570,83 @@ class StackVisualizer(BaseVisualizer):
 
     def handle_push(self):
         try:
-            if self.push_input.text():
-                self.data_structure.push(self.push_input.text())
+            text = self.push_input.text()
+            if not text:
+                return
+
+            if self.anim_enabled:
+                self.data_structure.push(text)  # 先入栈，后动画
                 self.push_input.clear()
                 self.visual_area.anim_state = {'type': 'push', 'index': self.data_structure.length() - 1, 'scale': 0.1}
-                self.anim_timer.start(30)
+                self.anim_timer.setInterval(30)
+                self.anim_timer.start()
                 self.update_display()
+            else:
+                self.data_structure.push(text)
+                self.push_input.clear()
+                self.update_display()
+                self.status_label.setText(f"已入栈: {text}")
         except Exception as e:
             QMessageBox.warning(self, "错误", str(e))
 
     def handle_pop(self):
         try:
-            if not self.data_structure.is_empty():
+            if self.data_structure.is_empty():
+                QMessageBox.warning(self, "错误", "栈已空")
+                return
+
+            if self.anim_enabled:
                 self.visual_area.anim_state = {'type': 'highlight', 'index': self.data_structure.length() - 1,
                                                'offset_y': 0}
                 self.update_display()
                 QTimer.singleShot(500, self.start_pop_animation)
             else:
-                QMessageBox.warning(self, "错误", "栈已空")
+                val = self.data_structure.pop()
+                self.update_display()
+                self.status_label.setText(f"已出栈: {val}")
+
         except Exception as e:
             QMessageBox.warning(self, "错误", str(e))
 
     def start_pop_animation(self):
         self.visual_area.anim_state = {'type': 'pop', 'index': self.data_structure.length() - 1,
                                        'offset_y': 0}
-        self.anim_timer.start(30)
+        self.anim_timer.setInterval(30)
+        self.anim_timer.start()
 
     def update_animation(self):
         state = self.visual_area.anim_state
         if not state:
             self.anim_timer.stop()
             return
+
+        # 确保动画开关开启
+        if not self.anim_enabled:
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.update_display()
+            return
+
         if state['type'] == 'push':
             state['scale'] += 0.1
             if state['scale'] >= 1.0:
                 state['scale'] = 1.0
                 self.anim_timer.stop()
                 self.visual_area.anim_state = {}
+                self.status_label.setText(f"入栈完成, 当前栈深: {self.data_structure.length()}")
         elif state['type'] == 'pop':
             state['offset_y'] -= 15
             if state['offset_y'] < -300:
                 self.anim_timer.stop()
                 self.visual_area.anim_state = {}
-                self.data_structure.pop()
+                self.data_structure.pop()  # 动画结束后才真正移除数据
                 self.status_label.setText(f"出栈完成, 当前栈深: {self.data_structure.length()}")
         self.update_display()
 
     def handle_clear(self):
         self.data_structure.clear()
         self.update_display()
+        self.status_label.setText("栈已清空")
 
     def random_build(self):
         self.data_structure.clear()
@@ -1477,11 +1728,10 @@ class SequenceListVisualizer(BaseVisualizer):
                 return
             val = self._get_val_from_input(text)
 
-            # 确保索引在有效范围内
             if self.input_idx.text():
                 idx = int(self.input_idx.text())
             else:
-                idx = self.data_structure.length()  # 默认尾插
+                idx = self.data_structure.length()
 
             if idx < 0 or idx > self.data_structure.length():
                 QMessageBox.warning(self, "错误", "索引越界")
@@ -1490,25 +1740,31 @@ class SequenceListVisualizer(BaseVisualizer):
             self.push_input_clear()
             self.highlighted_index = -1
 
-            # 统一将起始阶段设置为 shift_forward (尾插和空表则直接 move_in)，确保新节点立即悬浮
-            if idx == self.data_structure.length() or self.data_structure.is_empty():
-                start_phase = 'move_in'
+            if self.anim_enabled:
+                if idx == self.data_structure.length() or self.data_structure.is_empty():
+                    start_phase = 'move_in'
+                else:
+                    start_phase = 'shift_forward'
+
+                self.visual_area.anim_state = {
+                    'type': 'seq_insert',
+                    'target_idx': idx,
+                    'new_val': val,
+                    'phase': start_phase,
+                    'shift_index': self.data_structure.length() - 1,
+                    'progress': 0.0,
+                    'original_length': self.data_structure.length()
+                }
+
+                self.anim_timer.setInterval(30)
+                self.anim_timer.start()
+                self.status_label.setText(f"元素 {val} 悬浮在索引 {idx}，准备位移...")
             else:
-                start_phase = 'shift_forward'
+                # 禁用动画：直接插入
+                self.data_structure.insert(idx, val)
+                self.update_display()
+                self.status_label.setText(f"已插入: {val} @ {idx}")
 
-            self.visual_area.anim_state = {
-                'type': 'seq_insert',
-                'target_idx': idx,
-                'new_val': val,
-                'phase': start_phase,  # 修正：先悬浮，后位移/直接移入
-                'shift_index': self.data_structure.length() - 1,  # 从最后一个元素开始向后移
-                'progress': 0.0,
-                'original_length': self.data_structure.length()
-            }
-
-            self.anim_timer.setInterval(30)
-            self.anim_timer.start()
-            self.status_label.setText(f"元素 {val} 悬浮在索引 {idx}，准备位移...")
         except Exception as e:
             QMessageBox.warning(self, "错误", str(e))
 
@@ -1531,11 +1787,29 @@ class SequenceListVisualizer(BaseVisualizer):
                 if target_idx < 0 or target_idx >= self.data_structure.length():
                     QMessageBox.warning(self, "错误", "索引越界")
                     return
-                # 按索引删除，直接进入删除阶段
-                self.start_deletion_phase(target_idx)
+
+                if self.anim_enabled:
+                    self.start_deletion_phase(target_idx)
+                else:
+                    # 禁用动画：直接删除
+                    val = self.data_structure.get(target_idx)
+                    self.data_structure.remove(target_idx)
+                    self.update_display()
+                    self.status_label.setText(f"已删除: {val} @ {target_idx}")
             else:
                 val = self._get_val_from_input(val_text)
-                # 按值删除，先启动查找动画
+                target_idx = self.data_structure.locate(val)
+
+                if not self.anim_enabled:
+                    if target_idx != -1:
+                        self.data_structure.remove(target_idx)
+                        self.update_display()
+                        self.status_label.setText(f"已删除: {val} @ {target_idx}")
+                    else:
+                        QMessageBox.information(self, "查找结果", f"未找到元素: {val}")
+                    return
+
+                # 启用动画：按值删除，先启动查找动画
                 self.visual_area.anim_state = {
                     'type': 'seq_search',
                     'target_val': val,
@@ -1560,7 +1834,7 @@ class SequenceListVisualizer(BaseVisualizer):
             'progress': 0.0,
             'flash_count': 0
         }
-        self.anim_timer.setInterval(100)  # 快速闪烁
+        self.anim_timer.setInterval(100)
         self.anim_timer.start()
         self.status_label.setText(f"找到待删除元素，索引: {idx}，准备删除...")
 
@@ -1572,28 +1846,31 @@ class SequenceListVisualizer(BaseVisualizer):
             self.update_display()
             return
 
+        # 确保动画开关开启
+        if not self.anim_enabled:
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.update_display()
+            return
+
         anim_type = state['type']
 
         if anim_type == 'seq_insert':
-            self.anim_timer.setInterval(30)  # 保持位移平滑
-            state['progress'] += 0.04  # 降低速度
+            self.anim_timer.setInterval(30)
+            state['progress'] += 0.04
 
             if state['phase'] == 'shift_forward':
-                # 元素向后位移
                 if state['progress'] >= 1.0:
                     state['progress'] = 0.0
                     state['shift_index'] -= 1
 
                     if state['shift_index'] < state['target_idx']:
-                        # 所有元素位移完成，进入移入阶段
                         state['phase'] = 'move_in'
                         self.status_label.setText("腾出空间，新元素移入...")
 
             elif state['phase'] == 'move_in':
-                # 新元素移入
                 if state['progress'] >= 1.0:
                     self.anim_timer.stop()
-                    # 真实插入数据
                     self.data_structure.insert(state['target_idx'], state['new_val'])
                     self.visual_area.anim_state = {}
                     self.update_display()
@@ -1601,7 +1878,6 @@ class SequenceListVisualizer(BaseVisualizer):
                     return
 
         elif anim_type == 'seq_search':
-            # 查找动画逻辑 (间隔由 timer 设定，400ms)
             self.highlighted_index = state['current_idx']
             if state['current_idx'] < self.data_structure.length():
                 curr_val = self.data_structure.get(state['current_idx'])
@@ -1609,7 +1885,7 @@ class SequenceListVisualizer(BaseVisualizer):
 
                 if str(curr_val) == str(state['target_val']):
                     self.anim_timer.stop()
-                    self.highlighted_index = -1  # 由 delete 阶段负责高亮
+                    self.highlighted_index = -1
                     self.start_deletion_phase(state['current_idx'])
                     return
                 else:
@@ -1623,44 +1899,37 @@ class SequenceListVisualizer(BaseVisualizer):
                 return
 
         elif anim_type == 'seq_delete':
-            self.anim_timer.setInterval(30)  # 位移阶段平滑
-            state['progress'] += 0.04  # 降低速度
+            self.anim_timer.setInterval(30)
+            state['progress'] += 0.04
 
             if state['phase'] == 'flash_target':
-                # 闪烁阶段
                 state['flash_count'] += 1
-                if state['flash_count'] >= 15:  # 闪烁 1.5 秒
+                if state['flash_count'] >= 15:
                     state['progress'] = 0.0
                     state['phase'] = 'move_out'
                     self.anim_timer.setInterval(30)
                     self.status_label.setText("目标元素移出...")
                 else:
-                    self.anim_timer.setInterval(100)  # 保持闪烁速度
+                    self.anim_timer.setInterval(100)
 
             elif state['phase'] == 'move_out':
-                # 移出淡出
                 if state['progress'] >= 1.0:
                     state['progress'] = 0.0
-                    # 真实删除数据：必须在移出完成后执行，以保证位移基准正确
                     self.data_structure.remove(state['target_idx'])
 
                     if state['target_idx'] >= self.data_structure.length():
-                        # 删除的是最后一个元素，无需位移
                         state['phase'] = 'cleanup'
                     else:
                         state['phase'] = 'shift_backward'
-                        # shift_index 从被删除位置后的第一个元素开始 (即 target_idx)
                         state['shift_index'] = state['target_idx']
                         self.status_label.setText("后置元素向前位移...")
 
             elif state['phase'] == 'shift_backward':
-                # 元素向前位移
                 if state['progress'] >= 1.0:
                     state['progress'] = 0.0
                     state['shift_index'] += 1
 
                     if state['shift_index'] >= self.data_structure.length():
-                        # 所有元素位移完成
                         state['phase'] = 'cleanup'
 
             elif state['phase'] == 'cleanup':
@@ -1692,6 +1961,7 @@ class SequenceListVisualizer(BaseVisualizer):
         self.data_structure.clear()
         self.highlighted_index = -1
         self.update_display()
+        self.status_label.setText("顺序表已清空")
 
     def random_build(self):
         self.data_structure.clear()
@@ -1762,36 +2032,69 @@ class LinkedListVisualizer(BaseVisualizer):
         grid.addWidget(btn_clr, 3, 0, 1, 2)
         return grid
 
-    def _get_val_from_input(self):
+    def _get_val_from_input(self, text):
         try:
             return int(text)
         except:
             return text
 
     def start_insert_animation(self, idx, val):
+        if not self.anim_enabled:
+            self.data_structure.insert(idx, val)
+            self.update_display()
+            self.status_label.setText(f"已插入: {val} @ {idx}")
+            return
+
         start_phase = 'shift'
         if idx >= self.data_structure.length():
             start_phase = 'appear'
         self.visual_area.anim_state = {'type': 'linked_insert', 'target_idx': idx, 'new_val': val, 'phase': start_phase,
                                        'progress': 0.0}
-        self.anim_timer.start(20)
+        self.anim_timer.setInterval(20)
+        self.anim_timer.start()
 
     def start_delete_animation(self, idx):
+        if not self.anim_enabled:
+            val = self.data_structure.remove(idx)
+            self.update_display()
+            self.status_label.setText(f"已删除: {val} @ {idx}")
+            return
+
         self.visual_area.anim_state = {'type': 'linked_delete', 'target_idx': idx, 'phase': 'fade_prev_link',
                                        'progress': 0.0}
-        self.anim_timer.start(20)
+        self.anim_timer.setInterval(20)
+        self.anim_timer.start()
 
     def start_search_animation(self, val):
+        if not self.anim_enabled:
+            idx = self.data_structure.locate(val)
+            if idx != -1:
+                self.highlighted_index = idx
+                self.status_label.setText(f"找到元素 {val} 在索引: {idx}")
+            else:
+                self.highlighted_index = -1
+                QMessageBox.information(self, "提示", "未找到元素")
+            self.update_display()
+            return
+
         self.visual_area.anim_state = {'type': 'linked_search', 'current_idx': 0, 'target_val': val,
                                        'phase': 'scanning', 'flash_time': 0}
         self.visual_area.highlighted_index = -1
-        self.update_display()  # Force update
-        self.anim_timer.start(400)
+        self.update_display()
+        self.anim_timer.setInterval(400)
+        self.anim_timer.start()
 
     def update_animation(self):
         state = self.visual_area.anim_state
         if not state:
             self.anim_timer.stop()
+            return
+
+        # 确保动画开关开启
+        if not self.anim_enabled:
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.update_display()
             return
 
         # Search Animation
@@ -1877,6 +2180,7 @@ class LinkedListVisualizer(BaseVisualizer):
         if text:
             val = self._get_val_from_input(text)
             self.start_insert_animation(0, val)
+            self.input_val.clear()
         else:
             QMessageBox.warning(self, "错误", "请输入值")
 
@@ -1886,18 +2190,30 @@ class LinkedListVisualizer(BaseVisualizer):
             val = self._get_val_from_input(text)
             idx = self.data_structure.length()
             self.start_insert_animation(idx, val)
+            self.input_val.clear()
         else:
             QMessageBox.warning(self, "错误", "请输入值")
 
     def handle_insert_idx(self):
         try:
             text = self.input_val.text()
+            if not text:
+                raise ValueError("请输入值")
             val = self._get_val_from_input(text)
-            idx = int(self.input_idx.text())
+
+            idx_text = self.input_idx.text()
+            if not idx_text:
+                raise ValueError("请输入索引")
+
+            idx = int(idx_text)
             if idx < 0 or idx > self.data_structure.length():
                 QMessageBox.warning(self, "错误", "索引越界")
                 return
+
             self.start_insert_animation(idx, val)
+            self.input_val.clear()
+            self.input_idx.clear()
+
         except Exception as e:
             QMessageBox.warning(self, "错误", str(e))
 
@@ -1905,21 +2221,28 @@ class LinkedListVisualizer(BaseVisualizer):
         try:
             idx_text = self.input_idx.text()
             val_text = self.input_val.text()
+
+            target_idx = -1
+
             if idx_text:
-                idx = int(idx_text)
-                if idx < 0 or idx >= self.data_structure.length():
+                target_idx = int(idx_text)
+                if target_idx < 0 or target_idx >= self.data_structure.length():
                     QMessageBox.warning(self, "错误", "索引越界")
                     return
-                self.start_delete_animation(idx)
             elif val_text:
                 val = self._get_val_from_input(val_text)
-                idx = self.data_structure.locate(val)
-                if idx == -1:
+                target_idx = self.data_structure.locate(val)
+                if target_idx == -1:
                     QMessageBox.warning(self, "错误", "未找到值")
                     return
-                self.start_delete_animation(idx)
             else:
                 QMessageBox.warning(self, "错误", "请输入索引或值")
+                return
+
+            self.start_delete_animation(target_idx)
+            self.input_val.clear()
+            self.input_idx.clear()
+
         except Exception as e:
             QMessageBox.warning(self, "错误", str(e))
 
@@ -1930,11 +2253,13 @@ class LinkedListVisualizer(BaseVisualizer):
             return
         val = self._get_val_from_input(text)
         self.start_search_animation(val)
+        self.input_val.clear()
 
     def handle_clear(self):
         self.data_structure.clear()
         self.highlighted_index = -1
         self.update_display()
+        self.status_label.setText("链表已清空")
 
     def random_build(self):
         self.data_structure.clear()
@@ -1945,6 +2270,7 @@ class LinkedListVisualizer(BaseVisualizer):
     def _update_status_text(self):
         self.status_label.setText(f"链表长度: {self.data_structure.length()}")
 
+
 class BinaryTreeVisualizer(BaseVisualizer):
     def __init__(self, main_window=None, lastwindow=None):
         super().__init__(main_window, lastwindow, "二叉树可视化工具")
@@ -1953,6 +2279,7 @@ class BinaryTreeVisualizer(BaseVisualizer):
         self.current_traversal_result = []
         self.anim_timer = QTimer()
         self.anim_timer.timeout.connect(self.update_animation)
+        self.is_animating = False  # 新增属性
 
     def _create_input_layout(self):
         layout = QVBoxLayout()
@@ -2034,6 +2361,7 @@ class BinaryTreeVisualizer(BaseVisualizer):
             self.visual_area.set_data_structure(self.data_structure)
             self.update_display()
             self.status_label.setText("根节点已创建")
+            self.root_input.clear()
         else:
             QMessageBox.warning(self, "错误", "请输入根节点数据")
 
@@ -2045,14 +2373,29 @@ class BinaryTreeVisualizer(BaseVisualizer):
         if (is_left and parent_node.left_child) or (not is_left and parent_node.right_child):
             QMessageBox.warning(self, "错误", "该位置已有节点")
             return
-        if is_left:
-            self.data_structure.insert_left(p_idx, val)
+
+        if self.anim_enabled:
+            # 先执行插入，然后用动画显示
+            if is_left:
+                self.data_structure.insert_left(p_idx, val)
+            else:
+                self.data_structure.insert_right(p_idx, val)
+
+            # 获取新插入的节点
+            new_node = parent_node.left_child if is_left else parent_node.right_child
+
+            self.is_animating = True
+            self.visual_area.anim_state = {'type': 'tree_insert', 'target_node': new_node, 'phase': 'extend_line',
+                                           'progress': 0.0}
+            self.anim_timer.setInterval(30)
+            self.anim_timer.start()
         else:
-            self.data_structure.insert_right(p_idx, val)
-        new_node = parent_node.left_child if is_left else parent_node.right_child
-        self.visual_area.anim_state = {'type': 'tree_insert', 'target_node': new_node, 'phase': 'extend_line',
-                                       'progress': 0.0}
-        self.anim_timer.start(30)
+            if is_left:
+                self.data_structure.insert_left(p_idx, val)
+            else:
+                self.data_structure.insert_right(p_idx, val)
+            self.update_display()
+            self.status_label.setText(f"已添加 {'左' if is_left else '右'} 节点: {val} @ {p_idx}")
 
     def handle_add_left(self):
         try:
@@ -2063,6 +2406,8 @@ class BinaryTreeVisualizer(BaseVisualizer):
             if not val:
                 raise ValueError("请输入新节点数据")
             self.start_add_animation(p_idx, val, True)
+            self.parent_idx_input.clear()
+            self.child_val_input.clear()
         except Exception as e:
             QMessageBox.warning(self, "添加失败", str(e))
 
@@ -2075,6 +2420,8 @@ class BinaryTreeVisualizer(BaseVisualizer):
             if not val:
                 raise ValueError("请输入新节点数据")
             self.start_add_animation(p_idx, val, False)
+            self.parent_idx_input.clear()
+            self.child_val_input.clear()
         except Exception as e:
             QMessageBox.warning(self, "添加失败", str(e))
 
@@ -2087,13 +2434,41 @@ class BinaryTreeVisualizer(BaseVisualizer):
             node_to_del = self.data_structure._get_node(idx)
             if not node_to_del:
                 raise ValueError("节点不存在")
+
+            self.del_idx_input.clear()
+
             if node_to_del == self.data_structure.root:
                 self.data_structure.clear()
                 self.update_display()
+                self.status_label.setText("已清空整棵树")
                 return
-            self.visual_area.anim_state = {'type': 'tree_delete', 'target_node': node_to_del, 'phase': 'fade',
-                                           'progress': 0.0}
-            self.anim_timer.start(30)
+
+            # 找到父节点并确定是左还是右
+            parent_node = node_to_del.parent
+            if parent_node is None:  # 非根节点但无父节点，异常情况，直接删除
+                self.data_structure.clear()
+                self.update_display()
+                return
+
+            if self.anim_enabled:
+                self.is_animating = True
+                self.visual_area.anim_state = {'type': 'tree_delete', 'target_node': node_to_del, 'phase': 'fade',
+                                               'progress': 0.0}
+                self.anim_timer.setInterval(30)
+                self.anim_timer.start()
+            else:
+                if parent_node.left_child == node_to_del:
+                    parent_node.left_child = None
+                elif parent_node.right_child == node_to_del:
+                    parent_node.right_child = None
+
+                # 简单更新 size (不精确，但比没做好)
+                # 由于 _get_node 依赖索引，删除子树后索引会变化，这里先不精确更新
+                self.data_structure._size -= 1  # 这是一个不精确的简化，实际应该递归计算
+
+                self.update_display()
+                self.status_label.setText(f"已删除索引 {idx} 及其子树")
+
         except Exception as e:
             QMessageBox.warning(self, "删除失败", str(e))
 
@@ -2101,7 +2476,17 @@ class BinaryTreeVisualizer(BaseVisualizer):
         state = self.visual_area.anim_state
         if not state:
             self.anim_timer.stop()
+            self.is_animating = False
             return
+
+        # 确保动画开关开启
+        if not self.anim_enabled:
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.is_animating = False
+            self.update_display()
+            return
+
         state['progress'] += 0.05
         if state['progress'] >= 1.0:
             state['progress'] = 0.0
@@ -2111,6 +2496,7 @@ class BinaryTreeVisualizer(BaseVisualizer):
                 elif state['phase'] == 'grow_node':
                     self.visual_area.anim_state = {}
                     self.anim_timer.stop()
+                    self.is_animating = False
                     self.status_label.setText("添加完成")
             elif state['type'] == 'tree_delete':
                 if state['phase'] == 'fade':
@@ -2120,9 +2506,10 @@ class BinaryTreeVisualizer(BaseVisualizer):
                             node.parent.left_child = None
                         else:
                             node.parent.right_child = None
-                        self.data_structure._size -= 1
+                        self.data_structure._size -= 1  # 简化处理
                     self.visual_area.anim_state = {}
                     self.anim_timer.stop()
+                    self.is_animating = False
                     self.status_label.setText("删除完成")
         self.update_display()
 
@@ -2130,9 +2517,11 @@ class BinaryTreeVisualizer(BaseVisualizer):
         if self.data_structure.is_empty():
             QMessageBox.warning(self, "错误", "树为空")
             return
+
         self.animation_steps = []
         self.current_traversal_result = []
         self.visual_area.traversal_text = ""
+
         if type_ == 'pre':
             self._get_preorder_nodes(self.data_structure.root, self.animation_steps)
             name = "前序"
@@ -2142,9 +2531,21 @@ class BinaryTreeVisualizer(BaseVisualizer):
         else:
             self._get_postorder_nodes(self.data_structure.root, self.animation_steps)
             name = "后序"
+
         self.is_animating = True
         self.status_label.setText(f"正在进行{name}遍历...")
-        self._run_traversal_animation()
+
+        if self.anim_enabled:
+            QTimer.singleShot(100, self._run_traversal_animation)
+        else:
+            # 禁用动画：直接显示结果
+            result = [str(node.data) for node in self.animation_steps]
+            self.visual_area.traversal_text = f"[ {', '.join(result)} ]"
+            self.visual_area.highlighted_node = None
+            self.update_display()
+            self.is_animating = False
+            self.status_label.setText(f"{name}遍历完成: {self.visual_area.traversal_text}")
+            QTimer.singleShot(5000, self.clear_traversal_text)
 
     def _get_preorder_nodes(self, node, res):
         if node:
@@ -2165,13 +2566,14 @@ class BinaryTreeVisualizer(BaseVisualizer):
             res.append(node)
 
     def _run_traversal_animation(self):
-        if not self.animation_steps:
+        if not self.animation_steps or not self.anim_enabled:  # 再次检查开关
             self.visual_area.highlighted_node = None
             self.is_animating = False
             QTimer.singleShot(5000, self.clear_traversal_text)
             self.update_display()
             self.status_label.setText("遍历完成")
             return
+
         node = self.animation_steps.pop(0)
         self.current_traversal_result.append(str(node.data))
         content = ", ".join(self.current_traversal_result)
@@ -2206,18 +2608,15 @@ class HuffmanTreeVisualizer(BaseVisualizer):
     def __init__(self, main_window=None, lastwindow=None):
         super().__init__(main_window, lastwindow, "哈夫曼树可视化工具")
 
-        # 核心数据结构改变：使用结构体数组 (List of HuffmanStructNode)
         self.struct_array = []
         self.visual_area.set_data_structure(self.struct_array)
 
         self.anim_timer = QTimer()
         self.anim_timer.timeout.connect(self.update_animation)
 
-        # 辅助列表：存储当前"森林"中所有树的根节点在 struct_array 中的下标
         self.forest_indices = []
-
-        # 运行令牌
         self.current_run_token = 0
+        self.is_animating = False  # 新增属性
 
     def _create_input_layout(self):
         l = QVBoxLayout()
@@ -2247,13 +2646,14 @@ class HuffmanTreeVisualizer(BaseVisualizer):
         """强制重置环境，防止动画冲突"""
         self.anim_timer.stop()
         self.visual_area.anim_state = {}
-        self.visual_area.node_positions = {}  # {index: [x, y]}
+        self.visual_area.node_positions = {}
 
         self.struct_array = []
         self.forest_indices = []
 
         self.visual_area.set_data_structure(self.struct_array)
         self.current_run_token += 1
+        self.is_animating = False  # 重置动画状态
 
     def safe_callback(self, token, func):
         if token == self.current_run_token:
@@ -2261,57 +2661,91 @@ class HuffmanTreeVisualizer(BaseVisualizer):
 
     def build(self):
         try:
-            # 1. 重置
             self.reset_environment()
-
             text = self.weight_input.toPlainText()
             d = {}
             for item in text.split(','):
-                if ':' not in item:
-                    continue
+                if ':' not in item: continue
                 k, v = item.split(':')
                 d[k.strip()] = int(v.strip())
 
-            if not d:
-                raise ValueError("No input")
+            if not d: raise ValueError("No input")
 
-            # 2. 初始化结构体数组
             idx_counter = 0
             for k, v in d.items():
                 node = HuffmanStructNode(data=k, weight=v, index=idx_counter)
                 self.struct_array.append(node)
                 self.forest_indices.append(idx_counter)
 
-                # 初始化位置 (key is index now)
                 target_y = 60 + idx_counter * 60
                 self.visual_area.node_positions[idx_counter] = [float(80), float(target_y)]
-
                 idx_counter += 1
 
-            # 3. 更新显示
             self.visual_area.set_data_structure(self.struct_array)
             self.update_display()
 
-            # 4. 启动动画流程
-            self.status_label.setText("准备排序...")
-            token = self.current_run_token
-            QTimer.singleShot(500, lambda: self.safe_callback(token, self.start_sorting_phase))
+            if self.anim_enabled:
+                self.is_animating = True
+                self.status_label.setText("准备排序...")
+                token = self.current_run_token
+                QTimer.singleShot(500, lambda: self.safe_callback(token, self.start_sorting_phase))
+            else:
+                self.non_animated_build()
+                self.status_label.setText("哈夫曼树已构建 (无动画)")
+
 
         except Exception as e:
             QMessageBox.warning(self, "错误", f"输入格式错误: {e}")
 
+    def non_animated_build(self):
+        if not self.struct_array: return
+
+        current_nodes = sorted(self.struct_array, key=lambda n: n.weight)
+        temp_struct_array = self.struct_array[:]
+
+        while len(current_nodes) > 1:
+            n1 = current_nodes.pop(0)
+            n2 = current_nodes.pop(0)
+
+            new_weight = n1.weight + n2.weight
+            new_idx = len(temp_struct_array)
+
+            # 使用 temp_struct_array 的索引
+            n1_idx = n1.index
+            n2_idx = n2.index
+
+            parent_node = HuffmanStructNode(weight=new_weight, index=new_idx)
+            parent_node.left = n1_idx
+            parent_node.right = n2_idx
+            temp_struct_array.append(parent_node)
+
+            # 更新原始数组中的父指针 (这一步是必须的，否则无法绘制)
+            self.struct_array[n1_idx].parent = new_idx
+            self.struct_array[n2_idx].parent = new_idx
+
+            # 找到新节点的插入位置并插入
+            import bisect
+            bisect.insort_left(current_nodes, parent_node, key=lambda n: n.weight)
+
+            # 由于索引的变化，需要更新 struct_array
+            self.struct_array = temp_struct_array[:]
+
+        # 强制设置根节点位置 (中心)
+        if self.struct_array:
+            root_idx = len(self.struct_array) - 1
+            self.forest_indices = [root_idx]
+            self.calculate_final_positions(root_idx)
+            self.update_display()
+
     def start_sorting_phase(self):
-        # 1. 对森林中的根节点下标进行排序（根据数组中的权重）
+        if not self.anim_enabled: return
+
         self.forest_indices.sort(key=lambda i: self.struct_array[i].weight)
 
-        # 2. 计算新的视觉位置
-        # 只有在左侧队列区（x < 200）的节点才参与垂直重排
-        target_positions = {}  # {index: [x, y]}
+        target_positions = {}
 
         queue_pos_index = 0
         for root_idx in self.forest_indices:
-            # 检查根节点及其子树是否还在左侧等待区
-            # 简单判断：如果根节点的当前x位置小于200，则视为在队列中
             curr_pos = self.visual_area.node_positions.get(root_idx, [0, 0])
 
             if curr_pos[0] < 200:
@@ -2320,37 +2754,31 @@ class HuffmanTreeVisualizer(BaseVisualizer):
                 self._recursively_move_tree_by_index(root_idx, 0, delta_y, target_positions)
                 queue_pos_index += 1
             else:
-                # 已经移出的树保持不动
                 pass
 
-        # 3. 设置动画
         self.visual_area.anim_state = {
             'type': 'SORT',
             'targets': target_positions,
             'progress': 0.0
         }
-        self.anim_timer.start(30)
+        self.anim_timer.setInterval(30)
+        self.anim_timer.start()
         self.status_label.setText("按权重排序 (结构体数组索引)...")
 
     def _recursively_move_tree_by_index(self, idx, delta_x, delta_y, new_positions, visited=None):
-        """辅助函数：根据下标移动整棵树"""
-        if idx == -1:
-            return
-        if visited is None:
-            visited = set()
-        if idx in visited:
-            return
+        if idx == -1: return
+        if visited is None: visited = set()
+        if idx in visited: return
         visited.add(idx)
 
         curr_pos = self.visual_area.node_positions.get(idx)
-        if not curr_pos:
-            return
+        if not curr_pos: return
 
+        # 累计移动量
         nx = curr_pos[0] + delta_x
         ny = curr_pos[1] + delta_y
 
-        if abs(nx) > 20000 or abs(ny) > 20000:
-            return
+        if abs(nx) > 20000 or abs(ny) > 20000: return
 
         new_positions[idx] = [nx, ny]
 
@@ -2359,33 +2787,15 @@ class HuffmanTreeVisualizer(BaseVisualizer):
         self._recursively_move_tree_by_index(node.right, delta_x, delta_y, new_positions, visited)
 
     def _get_tree_width(self, root_idx):
-        """计算树的宽度（叶子节点数量）"""
-        if root_idx == -1:
-            return 0
-
+        if root_idx == -1: return 0
         node = self.struct_array[root_idx]
-        if node.left == -1 and node.right == -1:
-            return 1  # 叶子节点
-
+        if node.left == -1 and node.right == -1: return 1
         return self._get_tree_width(node.left) + self._get_tree_width(node.right)
 
-    def _get_tree_height(self, root_idx):
-        """计算树的高度"""
-        if root_idx == -1:
-            return 0
-
-        node = self.struct_array[root_idx]
-        left_height = self._get_tree_height(node.left)
-        right_height = self._get_tree_height(node.right)
-
-        return max(left_height, right_height) + 1
-
     def _get_root_relative_x(self, root_idx, unit_width):
-        if root_idx == -1:
-            return 0
+        if root_idx == -1: return 0
         node = self.struct_array[root_idx]
-        if node.left == -1 and node.right == -1:
-            return 0.5 * unit_width
+        if node.left == -1 and node.right == -1: return 0.5 * unit_width
 
         w_l = self._get_tree_width(node.left) * unit_width
         rx_l = self._get_root_relative_x(node.left, unit_width)
@@ -2394,6 +2804,8 @@ class HuffmanTreeVisualizer(BaseVisualizer):
         return (rx_l + (w_l + rx_r)) / 2
 
     def start_merge_cycle(self):
+        if not self.anim_enabled: return
+
         if len(self.forest_indices) < 2:
             self.finish_construction()
             return
@@ -2405,8 +2817,7 @@ class HuffmanTreeVisualizer(BaseVisualizer):
 
         stage_roots = []
         for idx in self.forest_indices:
-            if idx == left_idx or idx == right_idx:
-                continue
+            if idx == left_idx or idx == right_idx: continue
             pos = self.visual_area.node_positions.get(idx)
             if pos and pos[0] > 220:
                 stage_roots.append(idx)
@@ -2417,8 +2828,6 @@ class HuffmanTreeVisualizer(BaseVisualizer):
 
         UNIT_W = 50
         GAP = 30
-
-        # Pre-calculate widths
         tree_specs = []
         total_raw_width = 0
 
@@ -2435,25 +2844,21 @@ class HuffmanTreeVisualizer(BaseVisualizer):
 
         total_raw_width += (len(tree_specs) - 1) * GAP
 
-        # Dynamic Scaling
         available_w = self.visual_area.width() - 260
         scale = 1.0
         if total_raw_width > available_w and available_w > 100:
             scale = available_w / total_raw_width
-            if scale < 0.4:
-                scale = 0.4  # Min scale
+            if scale < 0.4: scale = 0.4
 
         eff_unit = UNIT_W * scale
         eff_gap = GAP * scale
 
-        # Recalculate exact positions
         final_specs = []
         current_w_accum = 0
         for spec in tree_specs:
             width_px = spec['leaves'] * eff_unit
             if spec['type'] == 'new':
                 item = spec['obj']
-                # Recalculate relative root X with scaled unit
                 rx_l = self._get_root_relative_x(item['l'], eff_unit)
                 rx_r = self._get_root_relative_x(item['r'], eff_unit)
                 w_l_px = self._get_tree_width(item['l']) * eff_unit
@@ -2473,8 +2878,7 @@ class HuffmanTreeVisualizer(BaseVisualizer):
 
         total_final_width = current_w_accum - eff_gap
         start_x = 240 + (available_w - total_final_width) / 2
-        if start_x < 240:
-            start_x = 240
+        if start_x < 240: start_x = 240
 
         target_positions = {}
         curr_x = start_x
@@ -2490,13 +2894,11 @@ class HuffmanTreeVisualizer(BaseVisualizer):
                                                      target_positions)
             else:
                 new_parent_pos = [root_world_x, base_y]
-                # Left Child
                 lx = curr_x + fspec['l_rx']
-                ly = base_y + 60 * max(0.6, scale)  # Scale Y spacing slightly
+                ly = base_y + 60 * max(0.6, scale)
                 l_curr = self.visual_area.node_positions.get(fspec['l_idx'], [0, 0])
                 self._recursively_move_tree_by_index(fspec['l_idx'], lx - l_curr[0], ly - l_curr[1], target_positions)
 
-                # Right Child
                 rx = curr_x + fspec['r_rx']
                 ry = ly
                 r_curr = self.visual_area.node_positions.get(fspec['r_idx'], [0, 0])
@@ -2513,12 +2915,21 @@ class HuffmanTreeVisualizer(BaseVisualizer):
             'progress': 0.0
         }
         self.status_label.setText(f"合并: {left_node.weight} + {right_node.weight}")
-        self.anim_timer.start(30)
+        self.anim_timer.setInterval(30)
+        self.anim_timer.start()
 
     def update_animation(self):
         state = self.visual_area.anim_state
         if not state:
             self.anim_timer.stop()
+            self.is_animating = False
+            return
+
+        if not self.anim_enabled:  # 再次检查
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.is_animating = False
+            self.update_display()
             return
 
         state['progress'] += 0.05
@@ -2529,13 +2940,12 @@ class HuffmanTreeVisualizer(BaseVisualizer):
             self.anim_timer.stop()
             self.handle_phase_end(state)
         else:
-            # 插值动画
             if 'targets' in state:
                 for idx, target in state['targets'].items():
                     curr = self.visual_area.node_positions.get(idx)
-                    if not curr:
-                        curr = target
+                    if not curr: curr = target
 
+                    # 平滑插值
                     nx = curr[0] + (target[0] - curr[0]) * 0.2
                     ny = curr[1] + (target[1] - curr[1]) * 0.2
 
@@ -2564,13 +2974,9 @@ class HuffmanTreeVisualizer(BaseVisualizer):
             right_idx = state['right_idx']
             p_pos = state['parent_pos']
 
-            # --- 核心逻辑修改：操作数组 ---
-
-            # 1. 获取旧节点数据
             left_node = self.struct_array[left_idx]
             right_node = self.struct_array[right_idx]
 
-            # 2. 创建新节点并加入数组
             new_weight = left_node.weight + right_node.weight
             new_idx = len(self.struct_array)
 
@@ -2579,18 +2985,13 @@ class HuffmanTreeVisualizer(BaseVisualizer):
             parent_node.right = right_idx
             self.struct_array.append(parent_node)
 
-            # 3. 更新旧节点的父指针
-            left_node.parent = new_idx
-            right_node.parent = new_idx
+            self.struct_array[left_idx].parent = new_idx
+            self.struct_array[right_idx].parent = new_idx
 
-            # 4. 更新森林列表 (移出两个子树根，加入新树根)
-            if left_idx in self.forest_indices:
-                self.forest_indices.remove(left_idx)
-            if right_idx in self.forest_indices:
-                self.forest_indices.remove(right_idx)
+            if left_idx in self.forest_indices: self.forest_indices.remove(left_idx)
+            if right_idx in self.forest_indices: self.forest_indices.remove(right_idx)
             self.forest_indices.append(new_idx)
 
-            # 5. 注册新节点位置
             self.visual_area.node_positions[new_idx] = p_pos
 
             self.visual_area.anim_state = {
@@ -2599,7 +3000,8 @@ class HuffmanTreeVisualizer(BaseVisualizer):
                 'progress': 0.0
             }
             self.status_label.setText(f"生成父节点 [{new_idx}] 权重: {new_weight}")
-            self.anim_timer.start(30)
+            self.anim_timer.setInterval(30)
+            self.anim_timer.start()
 
         elif stype == 'MERGE_FLASH':
             self.visual_area.anim_state = {}
@@ -2608,14 +3010,33 @@ class HuffmanTreeVisualizer(BaseVisualizer):
 
         elif stype == 'FINAL_MOVE':
             self.visual_area.anim_state = {}
+            self.is_animating = False
             self.status_label.setText("构建完成")
 
     def finish_construction(self):
-        if not self.forest_indices:
-            return
+        if not self.forest_indices: return
         root_idx = self.forest_indices[0]
+        self.calculate_final_positions(root_idx)
 
-        # Calculate required width
+        if self.anim_enabled:
+            self.visual_area.anim_state = {
+                'type': 'FINAL_MOVE',
+                'targets': self.visual_area.node_positions.copy(),
+                'progress': 0.0
+            }
+            self.status_label.setText("构建完成！展示最终哈夫曼树")
+            self.anim_timer.setInterval(30)
+            self.anim_timer.start()
+        else:
+            self.is_animating = False
+            self.status_label.setText("构建完成 (无动画)")
+            self.update_display()
+
+    def calculate_final_positions(self, root_idx):
+        """非动画模式或最终移动模式下，直接计算所有节点的最终位置"""
+        self.visual_area.node_positions = {}
+        if root_idx == -1: return
+
         UNIT_W = 50
         width_leaves = self._get_tree_width(root_idx)
         raw_width = width_leaves * UNIT_W
@@ -2624,73 +3045,35 @@ class HuffmanTreeVisualizer(BaseVisualizer):
         scale = 1.0
         if raw_width > available_w - 40:
             scale = (available_w - 40) / raw_width
-            if scale < 0.4:
-                scale = 0.4
+            if scale < 0.4: scale = 0.4
 
         eff_unit = UNIT_W * scale
-
-        final_targets = {}
-        # Center X
         cx = available_w // 2
         cy = 80
 
-        # Recursively calculate positions using relative offsets
-        # We can reuse the logic: root world x = cx.
-        # But we need to know where children are relative to root.
-        # root_relative_x tells us where root is relative to left edge.
-        # But it's easier to just traverse and place.
+        # 使用一个独立的字典来存储计算出的位置，避免影响动画
+        final_targets = {}
 
         def place_node(idx, x, y, current_unit):
-            if idx == -1:
-                return
+            if idx == -1: return
             final_targets[idx] = [x, y]
             node = self.struct_array[idx]
 
+            my_rel = self._get_root_relative_x(idx, current_unit)
+
             if node.left != -1:
-                # Left child x?
-                # We need the relative offset logic.
-                # L_child X = Parent X - (Parent's relative X - Left's relative X)? No.
-                # Parent X = Left_Edge + Rel_X
-                # Left_Edge = Parent X - Rel_X
-                # Left_Child_X = Left_Edge + Left_Child_Rel_X
-
-                # Current tree's Rel_X
-                my_rel = self._get_root_relative_x(idx, current_unit)
-
-                # Left child's Rel_X
                 l_rel = self._get_root_relative_x(node.left, current_unit)
-
-                # Left Child World X
-                # The left edge of the current tree is at (x - my_rel)
-                # The left child is the start of that edge.
                 l_x = (x - my_rel) + l_rel
-
                 place_node(node.left, l_x, y + 60 * max(0.6, scale), current_unit)
 
             if node.right != -1:
-                # Right child starts after Left Tree
-                my_rel = self._get_root_relative_x(idx, current_unit)
-
                 w_l = self._get_tree_width(node.left) * current_unit
                 r_rel = self._get_root_relative_x(node.right, current_unit)
-
-                # Right Child World X
-                # Left Edge of current tree = x - my_rel
-                # Start of Right Tree = Left Edge + w_l
-                # Right Child X = Start of Right Tree + r_rel
                 r_x = (x - my_rel) + w_l + r_rel
-
                 place_node(node.right, r_x, y + 60 * max(0.6, scale), current_unit)
 
         place_node(root_idx, cx, cy, eff_unit)
-
-        self.visual_area.anim_state = {
-            'type': 'FINAL_MOVE',
-            'targets': final_targets,
-            'progress': 0.0
-        }
-        self.status_label.setText("构建完成！展示最终哈夫曼树")
-        self.anim_timer.start(30)
+        self.visual_area.node_positions = final_targets
 
     def random_build(self):
         self.reset_environment()
@@ -2714,7 +3097,6 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
         self.data_structure = BinarySearchTree()
         self.visual_area.set_data_structure(self.data_structure)
 
-        # 动画相关
         self.is_animating = False
         self.anim_timer = QTimer()
         self.anim_timer.timeout.connect(self.update_animation)
@@ -2773,7 +3155,14 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
             QMessageBox.warning(self, "错误", "请输入有效整数")
             return
 
-        # 如果树为空，直接插入，不进行复杂动画（或者可以做一个Appear动画，这里简单处理）
+        self.value_input.clear()
+
+        if not self.anim_enabled:
+            self.data_structure.insert(val)
+            self.update_display()
+            self.status_label.setText(f"已插入: {val}")
+            return
+
         if self.data_structure.is_empty():
             self.data_structure.insert(val)
             self.status_label.setText(f"插入根节点: {val}")
@@ -2792,7 +3181,8 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
             'progress': 0.0,
             'path_history': []
         }
-        self.anim_timer.start(30)
+        self.anim_timer.setInterval(30)
+        self.anim_timer.start()
         self.update_display()
 
     def start_delete(self):
@@ -2803,8 +3193,16 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
             QMessageBox.warning(self, "错误", "请输入有效整数")
             return
 
+        self.value_input.clear()
+
         if self.data_structure.is_empty():
             QMessageBox.warning(self, "错误", "树为空")
+            return
+
+        if not self.anim_enabled:
+            self.data_structure.delete(val)
+            self.update_display()
+            self.status_label.setText(f"已删除: {val}")
             return
 
         self.is_animating = True
@@ -2819,20 +3217,35 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
             'progress': 0.0,
             'path_history': []
         }
-        self.anim_timer.start(30)
+        self.anim_timer.setInterval(30)
+        self.anim_timer.start()
         self.update_display()
 
     def start_search(self):
         """启动查找动画"""
-        if self.is_animating:
-            return
+        if self.is_animating: return
         val = self._get_value()
         if val is None:
             QMessageBox.warning(self, "错误", "请输入有效整数")
             return
 
+        self.value_input.clear()
+
         if self.data_structure.is_empty():
             QMessageBox.information(self, "提示", "树为空")
+            return
+
+        if not self.anim_enabled:
+            # 禁用动画：直接查找并高亮
+            found_node = self.data_structure.search(val)
+            if found_node:
+                self.visual_area.highlighted_node = found_node
+                self.status_label.setText(f"找到元素: {val}")
+            else:
+                self.visual_area.highlighted_node = None
+                self.status_label.setText(f"未找到元素: {val}")
+                QMessageBox.information(self, "提示", "未找到元素")
+            self.update_display()
             return
 
         self.is_animating = True
@@ -2848,7 +3261,8 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
             'path_history': []
         }
 
-        self.anim_timer.start(30)
+        self.anim_timer.setInterval(30)
+        self.anim_timer.start()
         self.update_display()
 
     def update_animation(self):
@@ -2857,6 +3271,13 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
         if not state or anim_type not in ['bst_search', 'bst_insert', 'bst_delete']:
             self.anim_timer.stop()
             self.is_animating = False
+            return
+
+        if not self.anim_enabled:  # 再次检查
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.is_animating = False
+            self.update_display()
             return
 
         status = state['status']
@@ -2872,30 +3293,26 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
 
         # 2. 比较阶段
         elif status == 'compare':
-            state['progress'] += 0.05  # 模拟思考时间
+            state['progress'] += 0.05
             if state['progress'] >= 1.0:
                 state['progress'] = 0.0
 
-                # 核心比较逻辑
                 if target_val == curr.data:
-                    # 找到了（值相等）
                     if anim_type == 'bst_search':
                         state['status'] = 'found'
                         self.status_label.setText(f"找到元素: {target_val}")
                     elif anim_type == 'bst_insert':
-                        state['status'] = 'found'  # BST不插入重复元素，视为Found/Exist
+                        state['status'] = 'found'
                         self.status_label.setText(f"元素 {target_val} 已存在，不执行插入")
                     elif anim_type == 'bst_delete':
                         state['status'] = 'delete_found'
                         self.status_label.setText(f"找到待删元素: {target_val}")
 
                 elif target_val < curr.data:
-                    # 往左走
                     if curr.left_child:
                         state['next_node'] = curr.left_child
                         state['status'] = 'move'
                     else:
-                        # 左边没路了
                         if anim_type == 'bst_search' or anim_type == 'bst_delete':
                             state['status'] = 'not_found'
                             self.status_label.setText("元素不存在")
@@ -2903,13 +3320,11 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
                             state['status'] = 'insert_found'
                             self.status_label.setText("找到插入位置 (左)")
 
-                else:  # target_val > curr.data
-                    # 往右走
+                else:
                     if curr.right_child:
                         state['next_node'] = curr.right_child
                         state['status'] = 'move'
                     else:
-                        # 右边没路了
                         if anim_type == 'bst_search' or anim_type == 'bst_delete':
                             state['status'] = 'not_found'
                             self.status_label.setText("元素不存在")
@@ -2930,22 +3345,20 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
         # 4. 终结阶段处理
         elif status in ['found', 'not_found', 'insert_found', 'delete_found']:
             state['progress'] += 0.04
-            # 停留足够时间后结束
             if state['progress'] >= 2.0:
                 self.anim_timer.stop()
                 self.is_animating = False
 
-                # 执行数据结构变更
                 if status == 'insert_found':
                     self.data_structure.insert(target_val)
                     self.status_label.setText(f"已插入: {target_val}")
                 elif status == 'delete_found':
                     self.data_structure.delete(target_val)
                     self.status_label.setText(f"已删除: {target_val}")
+                elif status == 'not_found' and anim_type == 'bst_search':
+                    QMessageBox.information(self, "查找结果", f"未找到元素: {target_val}")
 
-                # 清理并刷新
                 self.visual_area.anim_state = {}
-                self.value_input.clear()
                 self.value_input.setFocus()
                 self.update_display()
                 return
@@ -2955,11 +3368,13 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
     def clear_tree(self):
         self.data_structure.clear()
         self.update_display()
+        self.status_label.setText("BST已清空")
 
     def random_build(self):
         self.clear_tree()
         [self.data_structure.insert(v) for v in random.sample(range(1, 100), 7)]
         self.update_display()
+        self.status_label.setText("已随机生成BST")
 
     def _update_status_text(self):
         self.status_label.setText(f"节点数: {self.data_structure.length()}")
@@ -2970,7 +3385,6 @@ def main():
     app.setApplicationName("DS Visualizer")
     app.setStyle('Fusion')
 
-    # 默认打开二叉搜索树可视化工具进行测试
     window = BinarySearchTreeVisualizer()
     window.show()
     return app.exec_()

@@ -16,10 +16,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.init_sound_effects()
-        #添加背景音乐
-
-
-
+        #是否添加背景音乐？
         self.setWindowTitle("数据结构课设——数据结构可视化")
         self.setGeometry(100, 100, 640, 852)
 
