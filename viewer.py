@@ -8,7 +8,7 @@ from PyQt5.QtMultimedia import QSoundEffect
 import traceback
 
 from visualization import StackVisualizer, SequenceListVisualizer, LinkedListVisualizer, BinaryTreeVisualizer, \
-    HuffmanTreeVisualizer, BinarySearchTreeVisualizer
+    HuffmanTreeVisualizer, BinarySearchTreeVisualizer, AVLTreeVisualizer
 from qianwen_api import QianWenAPI, AIAssistantThread
 
 
@@ -644,7 +644,7 @@ class TreeStructureWindow(QMainWindow):
         self.button_Huffman_tree.clicked.connect(self.on_button_Huffman_tree_clicked)
         button_layout1.addWidget(self.button_Huffman_tree)
 
-        # 新增按钮: 二叉搜索树
+
         self.button_BST = QPushButton("二叉搜索树")
         self.button_BST.setMinimumSize(150, 60)
         self.button_BST.setFont(QFont("SimHei", 12))
@@ -661,8 +661,27 @@ class TreeStructureWindow(QMainWindow):
                                     }
                                 """)
         self.button_BST.clicked.connect(self.on_button_BST_clicked)
-        # 添加到第二行或其他合适位置
         button_layout1.addWidget(self.button_BST)
+
+        self.button_AVL = QPushButton("AVL树")
+        self.button_AVL.setMinimumSize(150, 60)
+        self.button_AVL.setFont(QFont("SimHei", 12))
+        self.button_AVL.setStyleSheet("""
+                                            QPushButton {
+                                                background-color: rgba(60, 130, 255, 0.8);
+                                                color: white;
+                                                border-radius: 10px;
+                                                border: none;
+                                            }
+                                            QPushButton:hover {
+                                                background-color: rgba(60, 130, 255, 1.0);
+                                                transform: scale(1.05);
+                                            }
+                                        """)
+        self.button_AVL.clicked.connect(self.on_button_AVL_clicked)
+        # 添加到第二行或其他合适位置
+        button_layout1.addWidget(self.button_AVL)
+
 
         self.button_return = QPushButton("返回主界面")
         self.button_return.setMinimumSize(150, 60)
@@ -706,6 +725,10 @@ class TreeStructureWindow(QMainWindow):
         self.play_click_sound()
         self.go_to_BST()
 
+    def on_button_AVL_clicked(self):
+        self.play_click_sound()
+        self.go_to_AVL()
+
     def go_to_Binary_tree(self):
         try:
             self.Binary_tree_window = BinaryTreeVisualizer(self.mainwindow, self)
@@ -728,6 +751,16 @@ class TreeStructureWindow(QMainWindow):
             self.BST_window.show()
             self.hide()
             print("二叉搜索树可视化工具启动成功")
+        except Exception as e:
+            traceback.print_exc()
+            QMessageBox.critical(self, "错误", f"出错: {e}")
+
+    def go_to_AVL(self):
+        try:
+            self.AVL_window = AVLTreeVisualizer(self.mainwindow, self)
+            self.AVL_window.show()
+            self.hide()
+            print("AVL树可视化工具启动成功")
         except Exception as e:
             traceback.print_exc()
             QMessageBox.critical(self, "错误", f"出错: {e}")

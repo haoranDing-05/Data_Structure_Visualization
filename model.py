@@ -699,6 +699,226 @@ class HuffmanStructNode:
         self.right = -1  # 右孩子下标，-1表示无
 
 
+# --- model.py ---
+
+class AVLTreeNode(BinaryTreeNode):
+    """AVL树节点，增加高度属性"""
+
+    def __init__(self, data):
+        super().__init__(data)
+        self.height = 1
+
+
+# ==========================================
+#  请添加到 model.py 文件末尾
+# ==========================================
+
+class AVLTreeNode(BinaryTreeNode):
+    """AVL树节点，增加高度属性"""
+
+    def __init__(self, data):
+        super().__init__(data)
+        self.height = 1
+
+
+class AVLTree(BinarySearchTree, Serializable):
+    """AVL树实现（健壮版，支持动画分步演示）"""
+
+    def _get_height(self, node):
+        if not node: return 0
+        return node.height
+
+    def _get_balance(self, node):
+        if not node: return 0
+        return self._get_height(node.left_child) - self._get_height(node.right_child)
+
+    def update_heights_upwards(self, node):
+        """从当前节点向上更新高度，增加深度限制防止死循环"""
+        depth_limit = 1000  # 防止环导致死循环
+        while node and depth_limit > 0:
+            node.height = 1 + max(self._get_height(node.left_child), self._get_height(node.right_child))
+            node = node.parent
+            depth_limit -= 1
+
+    def rotate_right(self, y):
+        """右旋操作：将 y 的左子节点 x 提升为父节点"""
+        if not y or not y.left_child: return y
+
+        x = y.left_child
+        T2 = x.right_child
+
+        # 1. 旋转连接
+        x.right_child = y
+        y.left_child = T2
+
+        # 2. 更新 T2 的父节点
+        if T2: T2.parent = y
+
+        # 3. 更新 x 的父节点 (原 y 的父节点)
+        x.parent = y.parent
+
+        # 4. 更新 y 的父节点 (现为 x)
+        y.parent = x
+
+        # 5. 更新原 y 父节点对 x 的指向
+        if x.parent:
+            if x.parent.left_child == y:
+                x.parent.left_child = x
+            else:
+                x.parent.right_child = x
+        else:
+            self.root = x  # x 成为新根
+
+        # 6. 更新高度
+        self.update_heights_upwards(y)
+        return x
+
+    def rotate_left(self, x):
+        """左旋操作：将 x 的右子节点 y 提升为父节点"""
+        if not x or not x.right_child: return x
+
+        y = x.right_child
+        T2 = y.left_child
+
+        # 1. 旋转连接
+        y.left_child = x
+        x.right_child = T2
+
+        # 2. 更新 T2 的父节点
+        if T2: T2.parent = x
+
+        # 3. 更新 y 的父节点 (原 x 的父节点)
+        y.parent = x.parent
+
+        # 4. 更新 x 的父节点 (现为 y)
+        x.parent = y
+
+        # 5. 更新原 x 父节点对 y 的指向
+        if y.parent:
+            if y.parent.left_child == x:
+                y.parent.left_child = y
+            else:
+                y.parent.right_child = y
+        else:
+            self.root = y
+
+        # 6. 更新高度
+        self.update_heights_upwards(x)
+        return y
+
+    def insert(self, data, auto_balance=True):
+        """插入接口，auto_balance=False 用于动画分步"""
+        if not self.root:
+            self.root = AVLTreeNode(data)
+            self._size = 1
+            return self.root
+
+        # 标准 BST 插入
+        new_node = self._insert_bst(self.root, data)
+        self.update_heights_upwards(new_node)
+
+        if auto_balance:
+            self.rebalance_from(new_node)
+
+        return new_node
+
+    def _insert_bst(self, node, data):
+        # 简单的类型转换，防止 int/float 比较错误
+        try:
+            if not isinstance(data, type(node.data)):
+                data = float(data)
+                if not isinstance(node.data, float): node.data = float(node.data)
+        except:
+            pass
+
+        if data < node.data:
+            if node.left_child is None:
+                node.left_child = AVLTreeNode(data)
+                node.left_child.parent = node
+                self._size += 1
+                return node.left_child
+            else:
+                return self._insert_bst(node.left_child, data)
+        elif data > node.data:
+            if node.right_child is None:
+                node.right_child = AVLTreeNode(data)
+                node.right_child.parent = node
+                self._size += 1
+                return node.right_child
+            else:
+                return self._insert_bst(node.right_child, data)
+        return node  # 重复元素
+
+    def delete(self, data):
+        """删除节点"""
+        super().delete(data)
+        # AVL 删除比较复杂，通常需要从删除点的父节点向上平衡
+        # 简单实现：全树重新平衡（或者您可以补充递归删除逻辑）
+        # 这里为了演示稳定性，暂不自动平衡删除，或者您可以手动调用 rebalance_from root
+        pass
+
+    def rebalance_from(self, node):
+        """向上检查并平衡，处理所有不平衡节点"""
+        limit = 1000
+        while node and limit > 0:
+            limit -= 1
+            node.height = 1 + max(self._get_height(node.left_child), self._get_height(node.right_child))
+            balance = self._get_balance(node)
+
+            # 旋转后，node 的位置会被子节点占据，node 变为子节点
+            # 我们需要记录 node 的原 parent，或者旋转后的新子树根的 parent，以便继续向上
+            next_node = node.parent
+
+            if balance > 1:
+                if self._get_balance(node.left_child) >= 0:
+                    new_root = self.rotate_right(node)
+                else:
+                    self.rotate_left(node.left_child)
+                    new_root = self.rotate_right(node)
+                next_node = new_root.parent
+
+            elif balance < -1:
+                if self._get_balance(node.right_child) <= 0:
+                    new_root = self.rotate_left(node)
+                else:
+                    self.rotate_right(node.right_child)
+                    new_root = self.rotate_left(node)
+                next_node = new_root.parent
+
+            node = next_node
+
+    def get_lowest_unbalanced_node(self, start_node):
+        """查找最近的不平衡节点"""
+        curr = start_node
+        limit = 1000
+        while curr and limit > 0:
+            # 确保高度是最新的
+            curr.height = 1 + max(self._get_height(curr.left_child), self._get_height(curr.right_child))
+            balance = self._get_balance(curr)
+            if abs(balance) > 1:
+                return curr
+            curr = curr.parent
+            limit -= 1
+        return None
+
+    def to_dict(self):
+        data = super().to_dict()
+        data['type'] = 'AVLTree'
+        return data
+
+    @classmethod
+    def from_dict(cls, data):
+        obj = cls()
+        # 复用 BinaryTree 的结构恢复，然后重新插入以建立正确的高度和平衡
+        temp = BinaryTree.from_dict(data)
+        elements = []
+        obj._inorder_traversal(temp.root, elements)
+        obj.clear()
+        for e in elements:
+            obj.insert(e, auto_balance=True)
+        return obj
+
+
 class DataStructureManager:
     """数据结构管理器，负责保存和加载"""
 

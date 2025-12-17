@@ -15,7 +15,8 @@ from PyQt5.QtMultimedia import QSoundEffect
 from DSL_handler import DSLHandler
 
 try:
-    from model import Stack, SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, HuffmanStructNode
+    from model import Stack, SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, HuffmanStructNode, \
+        AVLTree
 except ImportError:
     # 兼容没有 model.py 的运行环境，提供 SequenceList 桩代码
     class Stack:
@@ -220,6 +221,9 @@ except ImportError:
 
         pass
 
+    class AVLTree(BinarySearchTree):
+        pass
+
 # --- 样式常量 ---
 STYLES = {
     "btn_primary": "QPushButton { background-color: #3b82f6; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold; min-height: 30px; } QPushButton:hover { background-color: #2563eb; }",
@@ -250,7 +254,7 @@ class VisualArea(QWidget):
         self.highlighted_node = None
         self.highlight_color = QColor(255, 215, 0)
 
-        # 动画状态字典
+        # 动画状态
         self.anim_state = {}
         self.traversal_text = None
         self.bfs_index_map = {}
@@ -262,10 +266,7 @@ class VisualArea(QWidget):
         self.tree_level_spacing = 60
         self.node_radius = 22
 
-        # 哈夫曼专用：存储每个节点下标的实时位置 {index (int): [x, y]}
         self.node_positions = {}
-
-        # 二叉树通用：每一帧绘制时缓存节点对象对应的坐标 {node_obj: (x, y)}
         self.current_frame_node_pos = {}
 
     def set_data_structure(self, ds):
@@ -279,18 +280,14 @@ class VisualArea(QWidget):
         self.update()
 
     def _get_safe_pos(self, key):
-        """安全获取节点坐标，处理 NaN/None/Inf 问题。Key 现在是 int 类型的下标"""
         pos = self.node_positions.get(key)
-        if not pos:
-            return None
+        if not pos: return None
         try:
             x, y = float(pos[0]), float(pos[1])
-            if math.isnan(x) or math.isnan(y) or math.isinf(x) or math.isinf(y):
-                return None
-            if abs(x) > 50000 or abs(y) > 50000:
-                return None
+            if math.isnan(x) or math.isnan(y) or math.isinf(x) or math.isinf(y): return None
+            if abs(x) > 50000 or abs(y) > 50000: return None
             return int(x), int(y)
-        except (ValueError, TypeError):
+        except:
             return None
 
     def paintEvent(self, event):
@@ -301,32 +298,34 @@ class VisualArea(QWidget):
         if self.data_structure is None:
             painter.setFont(QFont("Microsoft YaHei", 14))
             painter.setPen(QColor(156, 163, 175))
-            painter.drawText(self.rect(), Qt.AlignCenter, "可视化区域准备就绪\n请在左侧进行操作")
+            painter.drawText(self.rect(), Qt.AlignCenter, "可视化区域准备就绪")
             return
 
-        # 每一帧开始前清空二叉树坐标缓存
         self.current_frame_node_pos = {}
 
         try:
-            # 判断是否为哈夫曼结构体数组 (List[HuffmanStructNode])
-            if isinstance(self.data_structure, list) and len(self.data_structure) > 0 and isinstance(
-                    self.data_structure[0], HuffmanStructNode):
-                self._draw_huffman_array_process(painter)
-            elif isinstance(self.data_structure, list):
-                # 空列表或其他列表
-                pass
+            if isinstance(self.data_structure, list):
+                if len(self.data_structure) > 0 and isinstance(self.data_structure[0], HuffmanStructNode):
+                    self._draw_huffman_array_process(painter)
             elif isinstance(self.data_structure, (Stack, SequenceList)):
-                # --- 修改后的线性结构绘制入口 ---
                 self._draw_linear_structure(painter)
             elif isinstance(self.data_structure, LinkedList):
                 self._draw_linked_list(painter)
             elif isinstance(self.data_structure, BinaryTree) or isinstance(self.data_structure, BinarySearchTree):
-                self._draw_tree(painter)
+                # 关键：检查是否在进行 Morph 变形动画
+                if self.anim_state.get('type') == 'morph':
+                    self._draw_tree_morph(painter)
+                else:
+                    self._draw_tree(painter)
+        except RecursionError:
+            painter.setPen(Qt.red)
+            painter.setFont(QFont("Arial", 12, QFont.Bold))
+            painter.drawText(20, 40, "Error: Tree Cycle Detected! (Recursion Limit)")
         except Exception as e:
-            # print(f"Paint Error: {e}")
+            # print(e)
             pass
 
-        # 如果是 BST 搜索/插入/删除 动画，绘制浮动的操作值
+        # 绘制浮动层（BST Search/Insert 球体）
         anim_type = self.anim_state.get('type')
         if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
             self._draw_bst_overlay(painter)
@@ -342,17 +341,10 @@ class VisualArea(QWidget):
             painter.drawLine(x, 0, x, self.height())
         for y in range(0, self.height(), step):
             painter.drawLine(0, y, self.width(), y)
-
-        # 如果是哈夫曼模式（结构体数组），画一条分割线
         if isinstance(self.data_structure, list) and len(self.data_structure) > 0 and isinstance(self.data_structure[0],
                                                                                                  HuffmanStructNode):
             painter.setPen(QPen(QColor(209, 213, 219), 2, Qt.DashLine))
             painter.drawLine(220, 0, 220, self.height())
-            painter.setPen(QColor(107, 114, 128))
-            painter.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
-            painter.drawText(20, 30, "待处理队列 (权重排序)")
-            painter.drawText(240, 30, "哈夫曼树生成区")
-
         painter.restore()
 
     def _draw_traversal_text(self, painter):
@@ -364,17 +356,288 @@ class VisualArea(QWidget):
         painter.drawText(text_rect, Qt.AlignCenter | Qt.TextWordWrap, self.traversal_text)
         painter.restore()
 
-    # === BST Overlay (Search, Insert, Delete) ===
+    # === 关键修复：防死循环的树坐标计算 ===
+    def calculate_all_node_positions(self):
+        """计算树节点位置（防死循环版）"""
+        positions = {}
+        if not self.data_structure or self.data_structure.is_empty():
+            return positions
+
+        tree = self.data_structure
+        try:
+            tree_height = self._get_tree_height(tree.root)
+        except RecursionError:
+            return positions
+
+        area_width = self.width()
+        start_x = area_width // 2
+        start_y = 50
+        ideal_spacing = area_width / (2 ** (min(10, tree_height) - 1) + 1)
+        base_spacing = max(min(ideal_spacing, 120), 35)
+
+        visited = set()
+
+        def traverse(node, x, y, level_spacing):
+            if not node: return
+            if node in visited: return
+            visited.add(node)
+
+            positions[node] = (x, y)
+            next_y = y + self.tree_level_spacing
+            next_spacing = level_spacing * 0.55
+            if node.left_child:
+                traverse(node.left_child, x - level_spacing, next_y, next_spacing)
+            if node.right_child:
+                traverse(node.right_child, x + level_spacing, next_y, next_spacing)
+
+            visited.remove(node)
+
+        try:
+            traverse(tree.root, start_x, start_y, base_spacing)
+        except RecursionError:
+            pass
+        return positions
+
+    # === AVL Morph 动画绘制 ===
+    def _draw_tree_morph(self, painter):
+        state = self.anim_state
+        start_pos = state.get('start_positions', {})
+        end_pos = state.get('end_positions', {})
+        progress = state.get('progress', 0.0)
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        def get_curr_pos(node):
+            p1 = start_pos.get(node)
+            p2 = end_pos.get(node)
+            if not p1: p1 = p2
+            if not p2: return None
+            x = p1[0] + (p2[0] - p1[0]) * progress
+            y = p1[1] + (p2[1] - p1[1]) * progress
+            return (x, y)
+
+        all_nodes = list(end_pos.keys())
+
+        # Draw Edges
+        painter.setPen(QPen(QColor(156, 163, 175), 2))
+        for node in all_nodes:
+            curr = get_curr_pos(node)
+            if not curr: continue
+            if node.left_child:
+                child_pos = get_curr_pos(node.left_child)
+                if child_pos: painter.drawLine(int(curr[0]), int(curr[1]), int(child_pos[0]), int(child_pos[1]))
+            if node.right_child:
+                child_pos = get_curr_pos(node.right_child)
+                if child_pos: painter.drawLine(int(curr[0]), int(curr[1]), int(child_pos[0]), int(child_pos[1]))
+
+        # Draw Nodes
+        for node in all_nodes:
+            curr = get_curr_pos(node)
+            if not curr: continue
+            painter.setBrush(QBrush(QColor(186, 230, 253)))
+            if node == state.get('pivot') or node == state.get('new_root'):
+                painter.setBrush(QBrush(QColor(252, 211, 77)))
+            painter.setPen(QPen(QColor(31, 41, 55), 2))
+            radius = self.node_radius
+            painter.drawEllipse(QPoint(int(curr[0]), int(curr[1])), radius, radius)
+            painter.setPen(QPen(QColor(0, 0, 0), 1))
+            painter.setFont(QFont("Arial", 9, QFont.Bold))
+            painter.drawText(QRectF(curr[0] - radius, curr[1] - radius, radius * 2, radius * 2), Qt.AlignCenter,
+                             str(node.data))
+        painter.restore()
+
+    def _draw_tree(self, painter):
+        tree = self.data_structure
+        if tree.is_empty():
+            painter.setFont(QFont("Microsoft YaHei", 12, QFont.Italic))
+            painter.setPen(QColor(150, 150, 150))
+            painter.drawText(self.rect(), Qt.AlignCenter, "空树")
+            return
+
+        self.bfs_index_map = {}
+        if tree.root:
+            queue = [tree.root]
+            idx = 0
+            visited_bfs = set()
+            while queue:
+                node = queue.pop(0)
+                if node in visited_bfs: continue
+                visited_bfs.add(node)
+                self.bfs_index_map[node] = idx
+                idx += 1
+                if node.left_child: queue.append(node.left_child)
+                if node.right_child: queue.append(node.right_child)
+
+        try:
+            tree_height = self._get_tree_height(tree.root)
+        except RecursionError:
+            tree_height = 10
+
+        area_width = self.width()
+        start_x = area_width // 2
+        start_y = 50
+        ideal_spacing = area_width / (2 ** (min(10, tree_height) - 1) + 1)
+        base_spacing = max(min(ideal_spacing, 120), 35)
+
+        self._draw_tree_node(painter, tree.root, start_x, start_y, base_spacing, tree_height, set())
+
+        painter.setPen(QPen(QColor(107, 114, 128), 1))
+        painter.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
+        t_type = "普通二叉树"
+        if isinstance(tree, BinarySearchTree): t_type = "二叉搜索树"
+        if type(tree).__name__ == 'AVLTree': t_type = "AVL树 (自平衡)"
+        painter.drawText(20, 30, 400, 30, Qt.AlignLeft, f"{t_type} - 节点数: {tree.length()}")
+
+    def _get_tree_height(self, node, depth=0):
+        if not node or depth > 20: return 0
+        return 1 + max(self._get_tree_height(node.left_child, depth + 1),
+                       self._get_tree_height(node.right_child, depth + 1))
+
+    def _draw_tree_node(self, painter, node, x, y, level_spacing, remaining_height, visited):
+        if not node: return
+
+        if node in visited:
+            painter.setPen(Qt.red)
+            painter.drawText(int(x), int(y), "CYCLE!")
+            return
+        visited.add(node)
+
+        self.current_frame_node_pos[node] = (x, y)
+
+        radius = self.node_radius
+        next_y = y + self.tree_level_spacing
+        next_level_spacing = level_spacing * 0.55
+
+        if node.left_child:
+            left_x = x - level_spacing
+            self._draw_tree_edge(painter, x, y, left_x, next_y, radius, is_left=True, child_node=node.left_child)
+            self._draw_tree_node(painter, node.left_child, left_x, next_y, next_level_spacing, remaining_height - 1,
+                                 visited)
+        if node.right_child:
+            right_x = x + level_spacing
+            self._draw_tree_edge(painter, x, y, right_x, next_y, radius, is_left=False, child_node=node.right_child)
+            self._draw_tree_node(painter, node.right_child, right_x, next_y, next_level_spacing, remaining_height - 1,
+                                 visited)
+
+        # 节点绘制逻辑
+        anim_state = self.anim_state
+        is_target = (anim_state.get('target_node') == node)
+        anim_type = anim_state.get('type', '')
+        phase = anim_state.get('phase', '')
+        progress = anim_state.get('progress', 0.0)
+
+        opacity = 1.0
+        bg_color = None
+        if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
+            opacity = 0.2
+            path_history = anim_state.get('path_history', [])
+            if node in path_history or node == anim_state.get('current_node'): opacity = 1.0
+            status = anim_state.get('status')
+            if status == 'found' and node == anim_state.get('current_node'):
+                bg_color = QColor(34, 197, 94)
+            elif status == 'delete_found' and node == anim_state.get('current_node'):
+                bg_color = QColor(220, 38, 38)
+
+        scale = 1.0
+        if is_target:
+            if anim_type == 'tree_insert' or anim_type == 'huffman_merge':
+                if phase == 'extend_line':
+                    scale = 0.0
+                elif phase == 'grow_node':
+                    scale = progress
+            elif anim_type == 'tree_delete' and phase == 'fade':
+                opacity = 1.0 - progress
+
+        if scale <= 0.01:
+            visited.remove(node)
+            return
+
+        painter.save()
+        painter.setOpacity(opacity)
+        if scale != 1.0:
+            painter.translate(x, y);
+            painter.scale(scale, scale);
+            painter.translate(-x, -y)
+
+        if bg_color:
+            painter.setBrush(QBrush(bg_color))
+        elif hasattr(self, 'highlighted_node') and self.highlighted_node == node:
+            painter.setBrush(QBrush(self.highlight_color))
+        else:
+            if isinstance(self.data_structure, BinarySearchTree):
+                painter.setBrush(QBrush(QColor(254, 215, 170)))
+            else:
+                painter.setBrush(QBrush(QColor(186, 230, 253)))
+
+        painter.setPen(QPen(QColor(31, 41, 55), 2))
+        painter.drawEllipse(QPoint(int(x), int(y)), radius, radius)
+        painter.setPen(QPen(QColor(0, 0, 0), 1))
+        painter.setFont(QFont("Arial", 9, QFont.Bold))
+        painter.drawText(QRectF(x - radius, y - radius, radius * 2, radius * 2), Qt.AlignCenter, str(node.data))
+
+        if not isinstance(self.data_structure, BinarySearchTree):
+            real_index = self.bfs_index_map.get(node, -1)
+            if real_index != -1:
+                painter.setPen(QPen(Qt.red));
+                painter.setFont(QFont("Arial", 8, QFont.Bold))
+                painter.drawText(int(x + radius / 2), int(y - radius), 30, 15, Qt.AlignLeft, str(real_index))
+        painter.restore()
+        visited.remove(node)
+
+    def _draw_tree_edge(self, painter, px, py, cx, cy, radius, is_left, child_node=None):
+        state = self.anim_state
+        is_target_child = (state.get('target_node') == child_node)
+        anim_type = state.get('type', '')
+        phase = state.get('phase', '')
+        progress = state.get('progress', 0.0)
+        draw_ratio = 1.0
+        opacity = 1.0
+        if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
+            opacity = 0.1
+            path_history = state.get('path_history', [])
+            if child_node in path_history: opacity = 1.0
+        if is_target_child:
+            if anim_type == 'tree_insert' or anim_type == 'huffman_merge':
+                if phase == 'extend_line':
+                    draw_ratio = progress
+                elif phase == 'grow_node':
+                    draw_ratio = 1.0
+            elif anim_type == 'tree_delete' and phase == 'fade':
+                opacity = 1.0 - progress
+        if draw_ratio <= 0.01: return
+        angle = math.atan2(cy - py, cx - px)
+        sx = px + radius * math.cos(angle);
+        sy = py + radius * math.sin(angle)
+        ex = cx - radius * math.cos(angle);
+        ey = cy - radius * math.sin(angle)
+        painter.save()
+        painter.setOpacity(opacity)
+        painter.setPen(QPen(QColor(156, 163, 175), 2))
+        if draw_ratio < 1.0:
+            dex = sx + (ex - sx) * draw_ratio;
+            dey = sy + (ey - sy) * draw_ratio
+            painter.drawLine(int(sx), int(sy), int(dex), int(dey))
+        else:
+            painter.drawLine(int(sx), int(sy), int(ex), int(ey))
+            if not isinstance(self.data_structure, BinarySearchTree):
+                mx = (sx + ex) / 2;
+                my = (sy + ey) / 2
+                painter.setFont(QFont("Arial", 8));
+                painter.setPen(QPen(QColor(239, 68, 68)))
+                offset_x = -8 if is_left else 4
+                painter.drawText(int(mx + offset_x), int(my), 15, 15, Qt.AlignCenter, "0" if is_left else "1")
+        painter.restore()
+
     def _draw_bst_overlay(self, painter):
+        # 复制之前 VisualArea 中 _draw_bst_overlay 的逻辑，保持不变
         state = self.anim_state
         target_val = state.get('target_val')
         curr_node = state.get('current_node')
         next_node = state.get('next_node')
         progress = state.get('progress', 0.0)
         status = state.get('status')
-
         if not curr_node:
-            # 特殊情况：空树插入
             if status == 'insert_found' and self.data_structure.is_empty():
                 sx, sy = self.width() // 2, 50
                 draw_x, draw_y = sx, sy
@@ -382,158 +645,53 @@ class VisualArea(QWidget):
                 return
         else:
             start_pos = self.current_frame_node_pos.get(curr_node)
-            if not start_pos:
-                return
+            if not start_pos: return
             sx, sy = start_pos
             draw_x, draw_y = sx, sy
-
-        # 计算绘制位置
         if status in ['appear', 'compare']:
-            # 位于当前节点左上角，模拟比较
-            draw_x = sx - 40
+            draw_x = sx - 40;
             draw_y = sy - 40
-
         elif status == 'move':
             if next_node:
                 end_pos = self.current_frame_node_pos.get(next_node)
                 if end_pos:
                     ex, ey = end_pos
-                    draw_x = lerp(sx, ex, progress)
+                    draw_x = lerp(sx, ex, progress);
                     draw_y = lerp(sy, ey, progress)
             else:
-                # 往虚空移动
-                if target_val < curr_node.data:
-                    direction = -1
-                else:
-                    direction = 1
-
-                ex = sx + direction * 60
+                direction = -1 if target_val < curr_node.data else 1
+                ex = sx + direction * 60;
                 ey = sy + 60
-                draw_x = lerp(sx, ex, progress)
+                draw_x = lerp(sx, ex, progress);
                 draw_y = lerp(sy, ey, progress)
-
         elif status == 'insert_found':
-            # 停留在计算出的空位
-            if not self.data_structure.is_empty():
-                if target_val < curr_node.data:
-                    direction = -1
-                else:
-                    direction = 1
-                draw_x = sx + direction * 60
-                draw_y = sy + 60
-
-        elif status == 'delete_found':
-            # 停留在目标节点上
+            direction = -1 if not self.data_structure.is_empty() and target_val < curr_node.data else 1
+            draw_x = sx + direction * 60;
+            draw_y = sy + 60
+        elif status in ['delete_found', 'found']:
             draw_x, draw_y = sx, sy
-
-        elif status == 'found':
-            draw_x, draw_y = sx, sy
-
-        # 绘制漂浮球
         painter.save()
-
-        # 颜色与缩放逻辑
         scale = 1.0
-        bg_color = QColor(59, 130, 246)  # Blue (Processing)
-
+        bg_color = QColor(59, 130, 246)
         if status == 'found':
-            bg_color = QColor(34, 197, 94)  # Green (Search Found)
-            scale = 1.2
+            bg_color = QColor(34, 197, 94); scale = 1.2
         elif status == 'not_found':
-            bg_color = QColor(239, 68, 68)  # Red (Search Failed)
+            bg_color = QColor(239, 68, 68)
         elif status == 'insert_found':
-            bg_color = QColor(16, 185, 129)  # Emerald (Ready to Insert)
-            scale = 1.1
+            bg_color = QColor(16, 185, 129); scale = 1.1
         elif status == 'delete_found':
-            bg_color = QColor(220, 38, 38)  # Red (Ready to Delete)
-            scale = 1.2
-
-        painter.translate(draw_x, draw_y)
+            bg_color = QColor(220, 38, 38); scale = 1.2
+        painter.translate(draw_x, draw_y);
         painter.scale(scale, scale)
-
-        # 光晕效果
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.NoPen);
         painter.setBrush(QColor(bg_color.red(), bg_color.green(), bg_color.blue(), 100))
         painter.drawEllipse(QPoint(0, 0), 20, 20)
-
-        # 实心球
-        painter.setBrush(bg_color)
+        painter.setBrush(bg_color);
         painter.setPen(QPen(Qt.white, 2))
         painter.drawEllipse(QPoint(0, 0), 15, 15)
-
-        # 文字
-        painter.setPen(Qt.white)
+        painter.setPen(Qt.white);
         painter.setFont(QFont("Arial", 10, QFont.Bold))
         painter.drawText(QRectF(-15, -15, 30, 30), Qt.AlignCenter, str(target_val))
-
-        painter.restore()
-
-    # === Huffman Process Drawing ===
-    def _draw_huffman_array_process(self, painter):
-        struct_array = self.data_structure
-        painter.save()
-        painter.setPen(QPen(QColor(156, 163, 175), 2))
-
-        for idx, pos_data in self.node_positions.items():
-            if idx < 0 or idx >= len(struct_array):
-                continue
-            node = struct_array[idx]
-            current_pos = self._get_safe_pos(idx)
-            if not current_pos:
-                continue
-            cx, cy = current_pos
-
-            if node.left != -1:
-                l_pos = self._get_safe_pos(node.left)
-                if l_pos:
-                    lx, ly = l_pos
-                    painter.drawLine(cx, cy, lx, ly)
-
-            if node.right != -1:
-                r_pos = self._get_safe_pos(node.right)
-                if r_pos:
-                    rx, ry = r_pos
-                    painter.drawLine(cx, cy, rx, ry)
-        painter.restore()
-
-        for idx in self.node_positions.keys():
-            if idx < 0 or idx >= len(struct_array):
-                continue
-            node = struct_array[idx]
-            pos = self._get_safe_pos(idx)
-            if pos:
-                self._draw_single_huffman_struct_node(painter, node, pos[0], pos[1])
-
-    def _draw_single_huffman_struct_node(self, painter, node, x, y):
-        radius = self.node_radius
-        painter.save()
-
-        if node.left == -1 and node.right == -1:
-            bg_color = QColor(167, 243, 208)
-        else:
-            bg_color = QColor(254, 215, 170)
-
-        anim_targets = self.anim_state.get('targets', {})
-        active_parent_idx = self.anim_state.get('active_parent_idx', -1)
-
-        if (node.index in anim_targets) or (node.index == active_parent_idx):
-            bg_color = QColor(250, 204, 21)
-
-        painter.setBrush(QBrush(bg_color))
-        painter.setPen(QPen(QColor(31, 41, 55), 2))
-        painter.drawEllipse(QPoint(int(x), int(y)), radius, radius)
-
-        painter.setPen(QPen(QColor(0, 0, 0), 1))
-        painter.setFont(QFont("Arial", 8, QFont.Bold))
-
-        if node.data:
-            disp = f"{node.data}\n{node.weight}"
-        else:
-            disp = f"{node.weight}"
-
-        text_rect = QRectF(x - radius, y - radius, radius * 2, radius * 2)
-        painter.drawText(text_rect, Qt.AlignCenter, disp)
-
         painter.restore()
 
     def _draw_linear_structure(self, painter):
@@ -782,28 +940,6 @@ class VisualArea(QWidget):
 
             painter.restore()
 
-    def drawArrow(self, painter, start_x, start_y, end_x, end_y, color=QColor(59, 130, 246), opacity=1.0, progress=1.0):
-        if progress <= 0.01 or opacity <= 0.01:
-            return
-        painter.save()
-        painter.setOpacity(opacity)
-        pen = QPen(color, 2)
-        painter.setPen(pen)
-        painter.setBrush(QBrush(color))
-        dx = start_x + (end_x - start_x) * progress
-        dy = start_y + (end_y - start_y) * progress
-        painter.drawLine(int(start_x), int(start_y), int(dx), int(dy))
-        if progress > 0.8:
-            ang = math.atan2(end_y - start_y, end_x - start_x) * 180 / math.pi
-            sz = 10
-            p1 = QPointF(dx - sz * math.cos(math.radians(ang + 30)), dy - sz * math.sin(math.radians(ang + 30)))
-            p2 = QPointF(dx - sz * math.cos(math.radians(ang - 30)), dy - sz * math.sin(math.radians(ang - 30)))
-            head = QPolygonF()
-            head.append(QPointF(dx, dy))
-            head.append(p1)
-            head.append(p2)
-            painter.drawPolygon(head)
-        painter.restore()
 
     def _draw_linked_list(self, painter):
         ll = self.data_structure
@@ -968,189 +1104,95 @@ class VisualArea(QWidget):
                     self.drawArrow(painter, nx + node_w, ny + node_h / 2, nnx, nny + node_h / 2,
                                    color=QColor(16, 185, 129), progress=g)
 
-    def _draw_tree(self, painter):
-        tree = self.data_structure
-        if tree.is_empty():
-            painter.setFont(QFont("Microsoft YaHei", 12, QFont.Italic))
-            painter.setPen(QColor(150, 150, 150))
-            painter.drawText(self.rect(), Qt.AlignCenter, "空树")
-            return
-        self.bfs_index_map = {}
-        if tree.root:
-            queue = [tree.root]
-            idx = 0
-            while queue:
-                node = queue.pop(0)
-                self.bfs_index_map[node] = idx
-                idx += 1
-                if node.left_child:
-                    queue.append(node.left_child)
-                if node.right_child:
-                    queue.append(node.right_child)
-        tree_height = self._get_tree_height(tree.root)
-        area_width = self.width()
-        start_x = area_width // 2
-        start_y = 50
-        ideal_spacing = area_width / (2 ** (tree_height - 1) + 1)
-        base_spacing = min(ideal_spacing, 120)
-        base_spacing = max(base_spacing, 35)
-        self._draw_tree_node(painter, tree.root, start_x, start_y, base_spacing, tree_height)
-        painter.setPen(QPen(QColor(107, 114, 128), 1))
-        painter.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
-        t_type = "普通二叉树"
-        if isinstance(tree, BinarySearchTree):
-            t_type = "二叉搜索树"
-        painter.drawText(20, 30, 400, 30, Qt.AlignLeft, f"{t_type} - 节点数: {tree.length()}")
-
-    def _get_tree_height(self, node):
-        if not node:
-            return 0
-        return 1 + max(self._get_tree_height(node.left_child), self._get_tree_height(node.right_child))
-
-    def _draw_tree_node(self, painter, node, x, y, level_spacing, remaining_height):
-        if not node:
-            return
-
-        # 缓存当前帧坐标
-        self.current_frame_node_pos[node] = (x, y)
-
-        radius = self.node_radius
-        next_y = y + self.tree_level_spacing
-        next_level_spacing = level_spacing * 0.55
-
-        if node.left_child:
-            left_x = x - level_spacing
-            self._draw_tree_edge(painter, x, y, left_x, next_y, radius, is_left=True, child_node=node.left_child)
-            self._draw_tree_node(painter, node.left_child, left_x, next_y, next_level_spacing, remaining_height - 1)
-        if node.right_child:
-            right_x = x + level_spacing
-            self._draw_tree_edge(painter, x, y, right_x, next_y, radius, is_left=False, child_node=node.right_child)
-            self._draw_tree_node(painter, node.right_child, right_x, next_y, next_level_spacing, remaining_height - 1)
-
-        # Animation Logic
-        anim_state = self.anim_state
-        is_target = (anim_state.get('target_node') == node)
-        anim_type = anim_state.get('type', '')
-        phase = anim_state.get('phase', '')
-        progress = anim_state.get('progress', 0.0)
-
-        # BST Search/Insert/Delete Dimming Logic
-        opacity = 1.0
-        bg_color = None
-
-        # 如果是BST的相关操作，所有节点默认变暗
-        if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
-            opacity = 0.2
-            path_history = anim_state.get('path_history', [])
-            # 如果在历史路径中，或者是当前正在比较的节点，则点亮
-            if node in path_history or node == anim_state.get('current_node'):
-                opacity = 1.0
-
-            # 状态特有的高亮颜色
-            status = anim_state.get('status')
-            if status == 'found' and node == anim_state.get('current_node'):
-                bg_color = QColor(34, 197, 94)  # Green for Found
-            elif status == 'delete_found' and node == anim_state.get('current_node'):
-                bg_color = QColor(220, 38, 38)  # Red for Delete Target
-
-        scale = 1.0
-        if is_target:
-            if anim_type == 'tree_insert' or anim_type == 'huffman_merge':
-                if phase == 'extend_line':
-                    scale = 0.0
-                elif phase == 'grow_node':
-                    scale = progress
-            elif anim_type == 'tree_delete' and phase == 'fade':
-                opacity = 1.0 - progress
-
-        if scale <= 0.01:
-            return
-
+    def _draw_huffman_array_process(self, painter):
+        struct_array = self.data_structure
         painter.save()
-        painter.setOpacity(opacity)
-        if scale != 1.0:
-            painter.translate(x, y)
-            painter.scale(scale, scale)
-            painter.translate(-x, -y)
+        painter.setPen(QPen(QColor(156, 163, 175), 2))
 
-        if bg_color:
-            painter.setBrush(QBrush(bg_color))
-        elif hasattr(self, 'highlighted_node') and self.highlighted_node == node:
-            painter.setBrush(QBrush(self.highlight_color))
-        else:
-            if isinstance(self.data_structure, BinarySearchTree):
-                painter.setBrush(QBrush(QColor(254, 215, 170)))
-            else:
-                painter.setBrush(QBrush(QColor(186, 230, 253)))
+        for idx, pos_data in self.node_positions.items():
+            if idx < 0 or idx >= len(struct_array):
+                continue
+            node = struct_array[idx]
+            current_pos = self._get_safe_pos(idx)
+            if not current_pos:
+                continue
+            cx, cy = current_pos
 
-        painter.setPen(QPen(QColor(31, 41, 55), 2))
-        painter.drawEllipse(QPoint(int(x), int(y)), radius, radius)
-        painter.setPen(QPen(QColor(0, 0, 0), 1))
-        painter.setFont(QFont("Arial", 9, QFont.Bold))
-        disp = str(node.data)
+            if node.left != -1:
+                l_pos = self._get_safe_pos(node.left)
+                if l_pos:
+                    lx, ly = l_pos
+                    painter.drawLine(cx, cy, lx, ly)
 
-        text_rect = painter.boundingRect(int(x - radius), int(y - radius), radius * 2, radius * 2, Qt.AlignCenter, disp)
-        painter.drawText(text_rect, Qt.AlignCenter, disp)
-        if not isinstance(self.data_structure, BinarySearchTree):
-            real_index = self.bfs_index_map.get(node, -1)
-            if real_index != -1:
-                painter.setPen(QPen(Qt.red))
-                painter.setFont(QFont("Arial", 8, QFont.Bold))
-                painter.drawText(int(x + radius / 2), int(y - radius), 30, 15, Qt.AlignLeft, str(real_index))
+            if node.right != -1:
+                r_pos = self._get_safe_pos(node.right)
+                if r_pos:
+                    rx, ry = r_pos
+                    painter.drawLine(cx, cy, rx, ry)
         painter.restore()
 
-    def _draw_tree_edge(self, painter, px, py, cx, cy, radius, is_left, child_node=None):
-        # Animation Logic
-        state = self.anim_state
-        is_target_child = (state.get('target_node') == child_node)
-        anim_type = state.get('type', '')
-        phase = state.get('phase', '')
-        progress = state.get('progress', 0.0)
+        for idx in self.node_positions.keys():
+            if idx < 0 or idx >= len(struct_array):
+                continue
+            node = struct_array[idx]
+            pos = self._get_safe_pos(idx)
+            if pos:
+                self._draw_single_huffman_struct_node(painter, node, pos[0], pos[1])
 
-        draw_ratio = 1.0
-        opacity = 1.0
 
-        # BST Search/Insert/Delete Dimming
-        if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
-            opacity = 0.1  # Edges also dim
-            path_history = state.get('path_history', [])
-            if child_node in path_history:
-                opacity = 1.0
+    def _draw_single_huffman_struct_node(self, painter, node, x, y):
+        radius = self.node_radius
+        painter.save()
 
-        if is_target_child:
-            if anim_type == 'tree_insert' or anim_type == 'huffman_merge':
-                if phase == 'extend_line':
-                    draw_ratio = progress
-                elif phase == 'grow_node':
-                    draw_ratio = 1.0
-            elif anim_type == 'tree_delete' and phase == 'fade':
-                opacity = 1.0 - progress
+        if node.left == -1 and node.right == -1:
+            bg_color = QColor(167, 243, 208)
+        else:
+            bg_color = QColor(254, 215, 170)
 
-        if draw_ratio <= 0.01:
+        anim_targets = self.anim_state.get('targets', {})
+        active_parent_idx = self.anim_state.get('active_parent_idx', -1)
+
+        if (node.index in anim_targets) or (node.index == active_parent_idx):
+            bg_color = QColor(250, 204, 21)
+
+        painter.setBrush(QBrush(bg_color))
+        painter.setPen(QPen(QColor(31, 41, 55), 2))
+        painter.drawEllipse(QPoint(int(x), int(y)), radius, radius)
+
+        painter.setPen(QPen(QColor(0, 0, 0), 1))
+        painter.setFont(QFont("Arial", 8, QFont.Bold))
+
+        if node.data:
+            disp = f"{node.data}\n{node.weight}"
+        else:
+            disp = f"{node.weight}"
+
+        text_rect = QRectF(x - radius, y - radius, radius * 2, radius * 2)
+        painter.drawText(text_rect, Qt.AlignCenter, disp)
+
+        painter.restore()
+
+    def drawArrow(self, painter, start_x, start_y, end_x, end_y, color=QColor(59, 130, 246), opacity=1.0, progress=1.0):
+        if progress <= 0.01 or opacity <= 0.01:
             return
-
-        angle = math.atan2(cy - py, cx - px)
-        sx = px + radius * math.cos(angle)
-        sy = py + radius * math.sin(angle)
-        ex = cx - radius * math.cos(angle)
-        ey = cy - radius * math.sin(angle)
-
         painter.save()
         painter.setOpacity(opacity)
-        painter.setPen(QPen(QColor(156, 163, 175), 2))
-        if draw_ratio < 1.0:
-            dex = sx + (ex - sx) * draw_ratio
-            dey = sy + (ey - sy) * draw_ratio
-            painter.drawLine(int(sx), int(sy), int(dex), int(dey))
-        else:
-            painter.drawLine(int(sx), int(sy), int(ex), int(ey))
-            if not isinstance(self.data_structure, BinarySearchTree):
-                mx = (sx + ex) / 2
-                my = (sy + ey) / 2
-                painter.setFont(QFont("Arial", 8))
-                painter.setPen(QPen(QColor(239, 68, 68)))
-                offset_x = -8 if is_left else 4
-                painter.drawText(int(mx + offset_x), int(my), 15, 15, Qt.AlignCenter, "0" if is_left else "1")
+        pen = QPen(color, 2)
+        painter.setPen(pen)
+        painter.setBrush(QBrush(color))
+        dx = start_x + (end_x - start_x) * progress
+        dy = start_y + (end_y - start_y) * progress
+        painter.drawLine(int(start_x), int(start_y), int(dx), int(dy))
+        if progress > 0.8:
+            ang = math.atan2(end_y - start_y, end_x - start_x) * 180 / math.pi
+            sz = 10
+            p1 = QPointF(dx - sz * math.cos(math.radians(ang + 30)), dy - sz * math.sin(math.radians(ang + 30)))
+            p2 = QPointF(dx - sz * math.cos(math.radians(ang - 30)), dy - sz * math.sin(math.radians(ang - 30)))
+            head = QPolygonF()
+            head.append(QPointF(dx, dy))
+            head.append(p1)
+            head.append(p2)
+            painter.drawPolygon(head)
         painter.restore()
 
 
@@ -3380,12 +3422,212 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
         self.status_label.setText(f"节点数: {self.data_structure.length()}")
 
 
+class AVLTreeVisualizer(BinarySearchTreeVisualizer):
+    def __init__(self, main_window=None, last_window=None):
+        super().__init__(main_window, last_window)
+        self.title = "AVL树 (动画版)"
+        self.setWindowTitle(self.title)
+
+        # 初始化 AVL 树
+        self.data_structure = AVLTree()
+        self.visual_area.set_data_structure(self.data_structure)
+        self.last_inserted_node = None
+
+        # 预设演示数据 (自动平衡)
+        # 注意：这里我们手动插入一些数据来展示初始效果
+        for v in [10, 20, 30, 40, 50, 25]:
+            self.data_structure.insert(v, auto_balance=True)
+
+        self.update_display()
+        self.status_label.setText("AVL树已就绪 - 插入空树将直接创建根节点")
+
+    def start_insert(self):
+        """重写插入：包含空树检查 + BST动画 + 平衡动画"""
+        if self.is_animating: return
+        val = self._get_value()
+        if val is None: return
+        self.value_input.clear()
+
+        # [关键修复] 如果是空树，直接插入根节点，不播放查找动画 (防止崩溃)
+        if self.data_structure.is_empty():
+            self.data_structure.insert(val, auto_balance=True)
+            self.update_display()
+            self.status_label.setText(f"已创建根节点: {val}")
+            return
+
+        # 如果未启用动画，直接插入
+        if not self.anim_enabled:
+            self.data_structure.insert(val, auto_balance=True)
+            self.update_display()
+            self.status_label.setText(f"已插入: {val}")
+            return
+
+        # 树不为空，启动 BST 查找动画
+        self.is_animating = True
+        self.visual_area.anim_state = {
+            'type': 'bst_insert',
+            'target_val': val,
+            'current_node': self.data_structure.root,
+            'next_node': None,
+            'status': 'appear',
+            'progress': 0.0,
+            'path_history': []
+        }
+
+        # 断开旧连接，连接到 AVL 专用的动画更新函数
+        try:
+            self.anim_timer.timeout.disconnect()
+        except:
+            pass
+        self.anim_timer.timeout.connect(self.update_insert_animation)
+        self.anim_timer.setInterval(30)
+        self.anim_timer.start()
+        self.status_label.setText(f"查找插入位置: {val}...")
+
+    def update_insert_animation(self):
+        """处理插入动画阶段"""
+        state = self.visual_area.anim_state
+
+        # 检查是否完成了查找阶段
+        if state.get('type') == 'bst_insert' and state.get('status') in ['insert_found', 'found'] and state.get(
+                'progress') >= 1.0:
+            self.anim_timer.stop()
+            val = state['target_val']
+
+            if state['status'] == 'found':
+                self.status_label.setText(f"元素 {val} 已存在")
+                self.is_animating = False
+                self.visual_area.anim_state = {}
+                self.update_display()
+                return
+
+            # 2. 物理插入 (参数 auto_balance=False，因为我们要手动演示旋转)
+            new_node = self.data_structure.insert(val, auto_balance=False)
+            self.last_inserted_node = new_node
+
+            self.visual_area.anim_state = {}
+            self.update_display()
+
+            # 3. 启动平衡检查
+            self.status_label.setText(f"节点 {val} 已插入，检查平衡...")
+            QTimer.singleShot(300, self.check_balance_step)
+            return
+
+        # 如果还在查找路径中，复用父类的逻辑
+        super().update_animation()
+
+    def check_balance_step(self):
+        """检查树是否平衡"""
+        if not self.last_inserted_node:
+            self.finish_operation()
+            return
+
+        # 从最后插入/变动的节点向上查找最近的不平衡点
+        unbalanced = self.data_structure.get_lowest_unbalanced_node(self.last_inserted_node)
+
+        if not unbalanced:
+            self.finish_operation()
+            self.status_label.setText("树已平衡")
+            return
+
+        # 发现不平衡，准备旋转动画
+        self.prepare_rotation_animation(unbalanced)
+
+    def finish_operation(self):
+        """结束操作，清理状态"""
+        self.is_animating = False
+        self.visual_area.anim_state = {}
+        # 恢复默认 timer 连接 (防止影响其他页面)
+        try:
+            self.anim_timer.timeout.disconnect()
+            self.anim_timer.timeout.connect(self.update_animation)
+        except:
+            pass
+        self.update_display()
+
+    def prepare_rotation_animation(self, node):
+        """准备 Morph 动画"""
+        balance = self.data_structure._get_balance(node)
+        desc = ""
+
+        # 1. 记录旋转前坐标
+        start_positions = self.visual_area.calculate_all_node_positions()
+
+        # 2. 执行旋转 (改变数据结构)
+        pivot = node
+        new_root = None
+
+        if balance > 1:
+            if self.data_structure._get_balance(node.left_child) >= 0:
+                desc = "右旋 (LL)"
+                new_root = self.data_structure.rotate_right(node)
+            else:
+                desc = "先左后右 (LR)"
+                self.data_structure.rotate_left(node.left_child)
+                new_root = self.data_structure.rotate_right(node)
+        else:
+            if self.data_structure._get_balance(node.right_child) <= 0:
+                desc = "左旋 (RR)"
+                new_root = self.data_structure.rotate_left(node)
+            else:
+                desc = "先右后左 (RL)"
+                self.data_structure.rotate_right(node.right_child)
+                new_root = self.data_structure.rotate_left(node)
+
+        # 3. 记录旋转后坐标
+        end_positions = self.visual_area.calculate_all_node_positions()
+
+        # 4. 配置动画状态
+        self.visual_area.anim_state = {
+            'type': 'morph',
+            'start_positions': start_positions,
+            'end_positions': end_positions,
+            'pivot': pivot,
+            'new_root': new_root,
+            'progress': 0.0
+        }
+
+        self.status_label.setText(f"检测到不平衡! 执行 {desc}...")
+
+        try:
+            self.anim_timer.timeout.disconnect()
+        except:
+            pass
+        self.anim_timer.timeout.connect(self.update_morph_animation)
+        self.anim_timer.setInterval(20)  # 50fps
+        self.anim_timer.start()
+
+    def update_morph_animation(self):
+        """执行节点飞行位移动画"""
+        state = self.visual_area.anim_state
+        state['progress'] += 0.03  # 动画速度
+
+        if state['progress'] >= 1.0:
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.update_display()
+
+            # 旋转完成后，更新 last_inserted_node 为新子树根，继续向上检查是否还有不平衡
+            self.last_inserted_node = state['new_root']
+            QTimer.singleShot(200, self.check_balance_step)
+            return
+
+        self.visual_area.update()
+
+    def random_build(self):
+        self.data_structure.clear()
+        vals = random.sample(range(1, 100), 8)
+        for v in vals:
+            self.data_structure.insert(v, auto_balance=True)
+        self.update_display()
+        self.status_label.setText("已随机生成 AVL 树")
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("DS Visualizer")
     app.setStyle('Fusion')
 
-    window = BinarySearchTreeVisualizer()
+    window = AVLTreeVisualizer()
     window.show()
     return app.exec_()
 
