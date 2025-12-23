@@ -22,8 +22,8 @@ Beijing university of technology -- bjut
     * **语法:** `BUILD: value1, value2, value3`
     * **示例:** `BUILD: 10, 20, 30, 40`
 
-* **二叉搜索树 (BinarySearchTree):**
-    * 按照顺序依次插入数值。
+* **二叉搜索树 (BinarySearchTree) / AVL树 (AVLTree):**
+    * 按照顺序依次插入数值。对于 AVL 树，插入过程中会自动进行平衡旋转。
     * **语法:** `BUILD: value1, value2, ...`
     * **示例:** `BUILD: 50, 30, 70, 20, 40`
 
@@ -51,8 +51,8 @@ Beijing university of technology -- bjut
     * **语法:** `INSERT: value` 或 `INSERT: value, index`
     * **示例:** `INSERT: 99, 2` (在索引 2 的位置插入 99)
 
-* **二叉搜索树 (BST):**
-    * 按照 BST 规则插入值。
+* **二叉搜索树 (BST) / AVL树 (AVLTree):**
+    * 按照 BST 规则插入值。AVL树插入后会自动平衡。
     * **语法:** `INSERT: value`
     * **示例:** `INSERT: 65`
 
@@ -73,8 +73,8 @@ Beijing university of technology -- bjut
     * **语法:** `DELETE: index`
     * **示例:** `DELETE: 0` (删除头部元素)
 
-* **二叉搜索树 (BST):**
-    * 查找并删除包含指定**数值**的节点。
+* **二叉搜索树 (BST) / AVL树 (AVLTree):**
+    * 查找并删除包含指定**数值**的节点。AVL树删除后会自动平衡。
     * **语法:** `DELETE: value`
     * **示例:** `DELETE: 30`
 
@@ -85,11 +85,11 @@ Beijing university of technology -- bjut
 
 ### 脚本示例
 
-**栈操作:**
+**AVL树操作:**
 ```text
-# 初始化栈
-BUILD: 1, 2, 3
-# 压栈
-INSERT: 4
-# 弹栈
-DELETE
+# 批量构建 (将会自动触发旋转)
+BUILD: 10, 20, 30, 40, 50
+# 插入新元素
+INSERT: 25
+# 删除元素
+DELETE: 40

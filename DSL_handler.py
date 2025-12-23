@@ -4,7 +4,8 @@ from PyQt5.QtWidgets import QMessageBox
 # 导入必要的类，以便进行类型检查和方法调用
 try:
     # 假设 model.py 中的类结构如下
-    from model import Stack, SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, HuffmanStructNode
+    from model import Stack, SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, HuffmanStructNode, \
+        AVLTree
 except ImportError:
     # 如果 model.py 不存在，使用桩代码，确保 DSLHandler 可以运行
     class Stack:
@@ -35,6 +36,10 @@ except ImportError:
         pass
 
 
+    class AVLTree:
+        pass
+
+
 class DSLHandler:
     def __init__(self, visualizer):
         """
@@ -54,9 +59,10 @@ class DSLHandler:
                 self.vis.anim_timer.stop()
                 self.vis.visual_area.anim_state = {}
 
-            # 对于 BST/Tree，直接执行操作
+            # 对于 BST/Tree/AVL，直接执行操作
+            # [修改点] 增加 AVLTreeVisualizer
             is_tree_visualizer = self.vis.__class__.__name__ in ['BinaryTreeVisualizer', 'BinarySearchTreeVisualizer',
-                                                                 'HuffmanTreeVisualizer']
+                                                                 'HuffmanTreeVisualizer', 'AVLTreeVisualizer']
 
             # 对于线性结构，需要清空动画状态，否则绘图会出错
             if hasattr(self.vis.visual_area, 'anim_state'):
@@ -127,7 +133,9 @@ class DSLHandler:
                 for i, val in enumerate(vals): self.ds.insert(self.ds.length(), val)  # 默认尾插
             elif structure_type == 'LinkedList':
                 for val in vals: self.ds.append(val)
-            elif structure_type in ['BinaryTree', 'BinarySearchTree']:
+
+            # [修改点] 增加 AVLTree
+            elif structure_type in ['BinaryTree', 'BinarySearchTree', 'AVLTree']:
                 if not vals: return
 
                 # 对于 BinaryTree，第一个元素视为根节点
@@ -148,8 +156,8 @@ class DSLHandler:
                             # 忽略插入失败 (如父节点不存在或位置被占用，通常不会发生于顺序插入)
                             pass
 
-                # 对于 BinarySearchTree，视为批量 insert
-                elif structure_type == 'BinarySearchTree':
+                # [修改点] 对于 BinarySearchTree 和 AVLTree，视为批量 insert
+                elif structure_type in ['BinarySearchTree', 'AVLTree']:
                     for val in vals: self.ds.insert(val)
 
         # === 2. INSERT 指令 ===
@@ -178,10 +186,12 @@ class DSLHandler:
                     else:
                         raise IndexError(f"INSERT 索引 {idx} 超出范围")
 
-            # --- 树结构：BinarySearchTree ---
-            elif structure_type == 'BinarySearchTree':
-                val = self._get_val_from_str(args[0])
-                self.ds.insert(val)  # BST 忽略其他参数
+            # --- 树结构：BinarySearchTree 和 AVLTree ---
+            # [修改点] 增加 AVLTree，并改为循环处理 args 以支持 "INSERT: 10, 20"
+            elif structure_type in ['BinarySearchTree', 'AVLTree']:
+                for item in args:
+                    val = self._get_val_from_str(item)
+                    self.ds.insert(val)  # BST/AVL 忽略其他参数，只插入值
 
             # --- 树结构：BinaryTree ---
             elif structure_type == 'BinaryTree':
@@ -235,11 +245,15 @@ class DSLHandler:
                 else:
                     raise IndexError(f"DELETE 索引 {idx} 超出范围")
 
-            # --- 树结构 ---
-            elif structure_type == 'BinarySearchTree':
-                val = self._get_val_from_str(args[0])
-                if not self.ds.delete(val):
-                    raise ValueError(f"BST 中未找到要删除的元素: {val}")
+            # --- 树结构：BinarySearchTree 和 AVLTree ---
+            # [修改点] 增加 AVLTree，并改为循环处理 args 以支持 "DELETE: 40, 50"
+            elif structure_type in ['BinarySearchTree', 'AVLTree']:
+                for item in args:
+                    val = self._get_val_from_str(item)
+                    if not self.ds.delete(val):
+                        # 这里可以选择抛出异常，或者忽略不存在的元素继续删除下一个
+                        # 为了严谨性，这里抛出异常
+                        raise ValueError(f"BST/AVL 中未找到要删除的元素: {val}")
 
             elif structure_type == 'BinaryTree':
                 # BinaryTree 删除通常按索引删除子树

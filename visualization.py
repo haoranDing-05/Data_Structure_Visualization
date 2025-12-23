@@ -3310,23 +3310,24 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
 class AVLTreeVisualizer(BinarySearchTreeVisualizer):
     def __init__(self, main_window=None, last_window=None):
         super().__init__(main_window, last_window)
-        self.title = "AVL树 (全自动平衡演示版)"
+        self.title = "AVL树 (分步旋转演示版)"
         self.setWindowTitle(self.title)
 
         # 初始化 AVL 树
         self.data_structure = AVLTree()
         self.visual_area.set_data_structure(self.data_structure)
 
-        # 核心变量：平衡检查的起点
+        # 核心变量
         self.balance_check_start_node = None
+        self.rotation_queue = [] # 旋转动作队列
 
-        # 预设演示数据 (生成题目描述中的树: 根30, 左20(10,25), 右50(40))
+        # 预设演示数据
         for v in [30, 20, 50, 10, 25, 40]:
             self.data_structure.insert(v, auto_balance=True)
 
         self._sync_root()
         self.update_display()
-        self.status_label.setText("AVL树已就绪 - 尝试删除节点40或50观察动画")
+        self.status_label.setText("AVL树已就绪 - 尝试删除节点40或50观察分步旋转")
 
     def _sync_root(self):
         """确保根节点引用正确"""
@@ -3345,14 +3346,13 @@ class AVLTreeVisualizer(BinarySearchTreeVisualizer):
         self.anim_timer.setInterval(30)
         self.anim_timer.start()
 
+    # --- 插入与删除入口 ---
     def start_insert(self):
-        """插入入口"""
         if self.is_animating: return
         val = self._get_value()
         if val is None: return
         self.value_input.clear()
 
-        # 空树或无动画直接处理
         if self.data_structure.is_empty() or not self.anim_enabled:
             self.data_structure.insert(val, auto_balance=True)
             self._sync_root()
@@ -3360,7 +3360,6 @@ class AVLTreeVisualizer(BinarySearchTreeVisualizer):
             self.status_label.setText(f"已插入: {val}")
             return
 
-        # 1. 启动查找动画
         self.is_animating = True
         self.visual_area.anim_state = {
             'type': 'bst_insert', 'target_val': val,
@@ -3371,14 +3370,12 @@ class AVLTreeVisualizer(BinarySearchTreeVisualizer):
         self.status_label.setText(f"查找插入位置: {val}...")
 
     def start_delete(self):
-        """删除入口"""
         if self.is_animating: return
         val = self._get_value()
         if val is None: return
         self.value_input.clear()
         if self.data_structure.is_empty(): return
 
-        # 无动画直接处理
         if not self.anim_enabled:
             self.data_structure.delete(val, auto_balance=True)
             self._sync_root()
@@ -3386,7 +3383,6 @@ class AVLTreeVisualizer(BinarySearchTreeVisualizer):
             self.status_label.setText(f"已删除: {val}")
             return
 
-        # 1. 启动查找动画
         self.is_animating = True
         self.status_label.setText(f"查找删除目标: {val}...")
         self.visual_area.anim_state = {
@@ -3396,11 +3392,10 @@ class AVLTreeVisualizer(BinarySearchTreeVisualizer):
         }
         self._connect_timer(self.update_delete_animation)
 
+    # --- 动画逻辑 ---
     def update_insert_animation(self):
-        """插入动画逻辑"""
         state = self.visual_area.anim_state
-        if state.get('type') == 'bst_insert' and state.get('status') in ['insert_found', 'found'] and state.get(
-                'progress') >= 1.0:
+        if state.get('type') == 'bst_insert' and state.get('status') in ['insert_found', 'found'] and state.get('progress') >= 1.0:
             self.anim_timer.stop()
             val = state['target_val']
 
@@ -3408,337 +3403,214 @@ class AVLTreeVisualizer(BinarySearchTreeVisualizer):
                 self.finish_operation("元素已存在")
                 return
 
-            # [步骤1] 记住当前树（虽然插入是新挂节点，但为了统一逻辑）
             start_positions = self.visual_area.calculate_all_node_positions()
-
-            # [步骤2] 物理插入 (auto_balance=False)
             new_node = self.data_structure.insert(val, auto_balance=False)
-            self.balance_check_start_node = new_node  # 记录检查点
+            self.balance_check_start_node = new_node
             self._sync_root()
-
-            # [步骤3] 计算新树布局
             end_positions = self.visual_area.calculate_all_node_positions()
 
-            # [步骤4] 启动 Morph 动画 (平滑展示新节点出现)
-            # 虽然插入通常是直接出现，但如果导致了挤压，morph 会更自然
             self.visual_area.anim_state = {
-                'type': 'morph',
-                'start_positions': start_positions,
-                'end_positions': end_positions,
-                'pivot': None,
-                'new_root': None,
-                'progress': 0.0,
-                'next_action': 'check_balance'  # 动画结束后，去检查平衡
+                'type': 'morph', 'start_positions': start_positions, 'end_positions': end_positions,
+                'pivot': None, 'new_root': None, 'progress': 0.0, 'next_action': 'check_balance'
             }
-            self.status_label.setText(f"节点插入完成，准备检查平衡...")
+            self.status_label.setText(f"插入完成，准备检查平衡...")
             self._connect_timer(self.update_morph_animation)
             return
         super().update_animation()
 
-    import traceback  # 引入这个库以便打印详细错误堆栈
-
     def update_delete_animation(self):
-        """删除动画逻辑（全包裹安全版）"""
         state = self.visual_area.anim_state
-
-        # 目标状态列表，确保包含 delete_found
         target_statuses = ['found', 'delete_found', 'not_found']
 
-        if state.get('type') == 'bst_delete' and state.get('status') in target_statuses and state.get(
-                'progress') >= 1.0:
-
+        if state.get('type') == 'bst_delete' and state.get('status') in target_statuses and state.get('progress') >= 1.0:
             self.anim_timer.stop()
-
-            # --- 【安全网开始】将所有逻辑包裹起来 ---
             try:
                 val = state['target_val']
-                print(f"DEBUG: 开始处理删除逻辑，目标值: {val}")
-
                 if state['status'] == 'not_found':
-                    self.finish_operation("元素不存在，无法删除")
+                    self.finish_operation("元素不存在")
                     return
 
-                # [步骤1] 记录删除前位置
                 start_positions = self.visual_area.calculate_all_node_positions()
 
-                # [步骤2] 物理删除 (auto_balance=False)
-                # 注意：这里我们信任 delete 方法已经修改为返回 Node 了
+                # 物理删除，关闭自动平衡以展示动画
                 balance_start_node = self.data_structure.delete(val, auto_balance=False)
 
-                print(f"DEBUG: 物理删除完成，返回平衡点: {balance_start_node}")
-
-                # [步骤3] 同步根节点与记录检查点
-                # 这一步之前可能在 try 外面，导致如果 root 没了就崩溃
                 self.balance_check_start_node = balance_start_node
                 self._sync_root()
-
-                # [步骤4] 计算新树布局
-                # 如果树空了，这里必须能处理空树的情况
                 end_positions = self.visual_area.calculate_all_node_positions()
 
-                # [步骤5] 启动 Morph 动画
-                # 判断树是否为空
                 is_tree_empty = self.data_structure.root is None
-
                 self.visual_area.anim_state = {
-                    'type': 'morph',
-                    'start_positions': start_positions,
-                    'end_positions': end_positions,
-                    'pivot': None,
-                    'new_root': None,
-                    'progress': 0.0,
-                    # 如果树空了，直接 finish；否则检查平衡
+                    'type': 'morph', 'start_positions': start_positions, 'end_positions': end_positions,
+                    'pivot': None, 'new_root': None, 'progress': 0.0,
                     'next_action': 'finish' if is_tree_empty else 'check_balance'
                 }
-
-                print("DEBUG: 启动 Morph 动画")
-                self.status_label.setText(f"节点删除完成，正在调整树结构...")
+                self.status_label.setText(f"删除完成，调整布局...")
                 self._connect_timer(self.update_morph_animation)
-
             except Exception as e:
-                # --- 【安全网捕获】 ---
-                print("\n!!! 严重错误: 动画逻辑发生异常 !!!")
-                print(f"错误信息: {e}")
-                print("错误堆栈:")
-                traceback.print_exc()  # 这行代码会打印出具体哪一行崩溃了
-
-                # 尝试恢复状态，避免界面卡死
-                self.finish_operation("发生内部错误")
-
+                print(f"Delete Error: {e}")
+                self.finish_operation("删除发生错误")
             return
-
-        # 没满足条件时，继续之前的查找动画
         super().update_animation()
 
-    def check_balance_step(self):
-        """平衡检查循环：这是在每一次结构调整（删除/插入）动画完成后调用的"""
-        self._sync_root()
+    # --- 平衡与旋转核心逻辑 ---
 
-        # 查找最深的不平衡节点
-        unbalanced = self.data_structure.get_lowest_unbalanced_node(self.balance_check_start_node)
+    def start_balance_check_animation(self):
+        """启动平衡检查"""
+        node = self.balance_check_start_node
+        if node is None:
+            if self.data_structure.root: node = self.data_structure.root
+            else:
+                self.finish_operation("树已清空")
+                return
 
-        if not unbalanced:
-            self.finish_operation("平衡检查完成，结构稳定")
+        self.visual_area.anim_state = {
+            'type': 'balance_check', 'current_node': node,
+            'status': 'checking', 'progress': 0.0
+        }
+        self.status_label.setText(f"开始从节点 {node.data} 向上检查平衡...")
+        self._connect_timer(self.update_balance_check_animation)
+
+    def update_balance_check_animation(self):
+        """平衡检查循环"""
+        state = self.visual_area.anim_state
+        node = state.get('current_node')
+
+        if not node:
+            self.finish_operation("平衡检查完成")
             return
 
-        # 发现不平衡，准备旋转
-        # 此时，树是“歪”的，我们准备把它“转正”
-        self.prepare_rotation_animation(unbalanced)
+        # 计算 BF
+        try:
+            if hasattr(self.data_structure, '_get_balance'):
+                bf = self.data_structure._get_balance(node)
+            else:
+                l = node.left_child.height if node.left_child else 0
+                r = node.right_child.height if node.right_child else 0
+                bf = l - r
+        except: bf = 0
+
+        self.status_label.setText(f"检查节点 {node.data} (BF = {bf})...")
+        self.visual_area.highlighted_node = node
+        self.visual_area.update()
+
+        # 失衡处理
+        if abs(bf) > 1:
+            self.anim_timer.stop()
+            self.status_label.setText(f"发现失衡 (BF={bf})，准备旋转...")
+            self.prepare_rotation_animation(node)
+            return
+
+        # 向上回溯
+        if node.parent:
+            state['current_node'] = node.parent
+        else:
+            self.visual_area.highlighted_node = None
+            self.finish_operation("平衡检查完成，树结构稳定")
 
     def prepare_rotation_animation(self, node):
-        """准备旋转动画：同样遵循 记忆->旋转->形态变化 的流程"""
-        balance = self.data_structure._get_balance(node)
-        desc = ""
+        """分析并生成旋转动作队列"""
+        bf = self.data_structure._get_balance(node)
+        self.rotation_queue = [] # 清空队列
 
-        # [步骤 1] 记住旋转前的样子 (Snapshot A)
-        start_positions = self.visual_area.calculate_all_node_positions()
+        # 根据 AVL 规则拆解为单步旋转序列
+        if bf > 1: # 左偏
+            if self.data_structure._get_balance(node.left_child) >= 0:
+                # LL型: 右旋(node)
+                self.rotation_queue.append(('right', node))
+            else:
+                # LR型: 左旋(左孩子) -> 右旋(node)
+                self.rotation_queue.append(('left', node.left_child))
+                self.rotation_queue.append(('right', node))
+        else: # 右偏
+            if self.data_structure._get_balance(node.right_child) <= 0:
+                # RR型: 左旋(node)
+                self.rotation_queue.append(('left', node))
+            else:
+                # RL型: 右旋(右孩子) -> 左旋(node)
+                self.rotation_queue.append(('right', node.right_child))
+                self.rotation_queue.append(('left', node))
 
-        # [步骤 2] 后台执行物理旋转
-        # 这一步执行后，数据结构的父子关系瞬间改变
+        # 开始处理队列
+        self.process_rotation_queue()
+
+    def process_rotation_queue(self):
+        """执行队列中的下一个旋转动作"""
+        if not self.rotation_queue:
+            # 队列为空，说明旋转序列完成
+            # 继续检查平衡（从当前位置或重新开始）
+            # 简单起见，我们重新启动平衡检查，确保全树稳定
+            self.start_balance_check_animation()
+            return
+
+        # 取出下一个动作
+        direction, node = self.rotation_queue.pop(0)
+
+        # 1. 记录当前状态
+        start_pos = self.visual_area.calculate_all_node_positions()
+
+        # 2. 执行单步物理旋转
         pivot = node
         new_root = None
+        desc = ""
 
-        if balance > 1:  # 左偏
-            if self.data_structure._get_balance(node.left_child) >= 0:
-                desc = "右旋 (LL)"
-                new_root = self.data_structure.rotate_right(node)
-            else:
-                desc = "先左后右 (LR)"
-                self.data_structure.rotate_left(node.left_child)
-                new_root = self.data_structure.rotate_right(node)
-        else:  # 右偏
-            if self.data_structure._get_balance(node.right_child) <= 0:
-                desc = "左旋 (RR)"
-                new_root = self.data_structure.rotate_left(node)
-            else:
-                desc = "先右后左 (RL)"
-                self.data_structure.rotate_right(node.right_child)
-                new_root = self.data_structure.rotate_left(node)
+        if direction == 'left':
+            new_root = self.data_structure.rotate_left(node)
+            desc = f"节点 {node.data} 左旋"
+        else:
+            new_root = self.data_structure.rotate_right(node)
+            desc = f"节点 {node.data} 右旋"
 
-        self._sync_root()
+        self._sync_root() # 关键：防止布局计算崩溃
 
-        # [步骤 3] 计算旋转后的样子 (Snapshot B)
-        # 此时新的父节点已经到了上面
-        end_positions = self.visual_area.calculate_all_node_positions()
+        # 3. 记录新状态
+        end_pos = self.visual_area.calculate_all_node_positions()
 
-        # [步骤 4] 启动 Morph 动画
-        # 播放旋转过程，并在结束后**再次**调用 check_balance，形成循环
+        # 4. 启动 Morph 动画
         self.visual_area.anim_state = {
             'type': 'morph',
-            'start_positions': start_positions,
-            'end_positions': end_positions,
+            'start_positions': start_pos,
+            'end_positions': end_pos,
             'pivot': pivot,
             'new_root': new_root,
             'progress': 0.0,
-            'next_action': 'check_balance'
+            'next_action': 'next_rotation_step' # 动画结束后回调此状态
         }
 
-        self.status_label.setText(f"检测到不平衡 (BF={balance})，正在执行 {desc}...")
+        self.status_label.setText(f"执行: {desc}")
         self._connect_timer(self.update_morph_animation)
 
     def update_morph_animation(self):
-        """处理节点移动、消失的插值动画"""
+        """处理 Morph 动画帧"""
         state = self.visual_area.anim_state
-
-        # 增加进度
-        state['progress'] += 0.05  # 调节速度：越小越慢
+        state['progress'] += 0.05
 
         if state['progress'] >= 1.0:
             self.anim_timer.stop()
             state['progress'] = 1.0
+            self.visual_area.update() # 绘制最后一帧
 
-            # 动画结束，决定下一步去哪
             next_action = state.get('next_action')
 
             if next_action == 'check_balance':
-                # 去执行平衡检查（对应 AVL/红黑树逻辑）
-                # 确保你 connect 到了正确的检查函数
                 self.start_balance_check_animation()
+            elif next_action == 'next_rotation_step':
+                # 继续执行队列中的下一个旋转
+                self.process_rotation_queue()
             elif next_action == 'finish':
                 self.finish_operation("操作完成")
-
-            # 刷新一下以显示最终准确位置
-            self.visual_area.update()
             return
 
-        # 触发重绘，paintEvent 会根据 progress 计算位置
         self.visual_area.update()
-
-    # --- 配合 PaintEvent 使用的辅助函数 ---
-
-    def draw_morph_frame(self, painter, state):
-        """
-        根据 progress，在 start_positions 和 end_positions 之间插值画图
-        """
-        t = state['progress']
-        start_pos = state['start_positions']
-        end_pos = state['end_positions']
-
-        # 获取所有涉及的节点（包括即将消失的）
-        all_nodes = set(start_pos.keys()) | set(end_pos.keys())
-
-        for node in all_nodes:
-            # 计算插值坐标
-            p_start = start_pos.get(node)
-            p_end = end_pos.get(node)
-
-            current_x, current_y = 0, 0
-
-            if p_start and p_end:
-                # 移动：从 A 到 B
-                current_x = p_start[0] + (p_end[0] - p_start[0]) * t
-                current_y = p_start[1] + (p_end[1] - p_start[1]) * t
-                opacity = 1.0
-            elif p_start and not p_end:
-                # 消失：节点被删除了
-                current_x, current_y = p_start
-                # 让他慢慢变透明，或者慢慢缩小
-                opacity = 1.0 - t
-            elif not p_start and p_end:
-                # 出现：新插入的节点（删除逻辑里一般没有这个，除非有替补节点飞过来）
-                current_x, current_y = p_end
-                opacity = t
-
-            # 拿到坐标后，画出这个节点
-            # 注意：你需要设置 painter 的透明度来配合 opacity
-            painter.setOpacity(opacity)
-            self.draw_node(painter, node, current_x, current_y)
-            painter.setOpacity(1.0)  # 还原
 
     def finish_operation(self, msg=""):
         self.is_animating = False
         self.visual_area.anim_state = {}
         if msg: self.status_label.setText(msg)
-        try:
-            self.anim_timer.timeout.disconnect()
-        except:
-            pass
-        self.anim_timer.timeout.connect(self.update_animation)
+        try: self.anim_timer.timeout.disconnect()
+        except: pass
         self.anim_timer.stop()
         self.update_display()
-
-    def start_balance_check_animation(self):
-        """
-        [缺失的函数] 启动平衡检查动画
-        从删除/插入的受影响节点开始，一路向上检查 BF 值
-        """
-        node = self.balance_check_start_node
-
-        # 情况处理：如果节点为空（比如删除了根节点导致树空），直接结束
-        if node is None:
-            # 尝试获取根节点，如果连根都没了，说明树空了
-            if self.data_structure.root:
-                node = self.data_structure.root
-            else:
-                self.finish_operation("树已清空，操作结束")
-                return
-
-        # 初始化动画状态
-        self.visual_area.anim_state = {
-            'type': 'balance_check',  # 状态类型
-            'current_node': node,  # 当前检查的节点
-            'status': 'checking',
-            'progress': 0.0
-        }
-
-        self.status_label.setText(f"Morph 完成，开始从节点 {node.data} 向上检查平衡...")
-        self._connect_timer(self.update_balance_check_animation)
-
-    def update_balance_check_animation(self):
-        """
-        [已修复] 平衡检查的帧循环逻辑 (Timer 调用)
-        """
-        state = self.visual_area.anim_state
-        node = state.get('current_node')
-
-        # 1. 安全检查
-        if not node:
-            self.finish_operation("平衡检查完成")
-            return
-
-        # 2. 计算平衡因子 (BF)
-        try:
-            # 优先尝试调用 model.py 中的私有方法 _get_balance
-            if hasattr(self.data_structure, '_get_balance'):
-                bf = self.data_structure._get_balance(node)
-            elif hasattr(self.data_structure, 'get_balance'):
-                bf = self.data_structure.get_balance(node)
-            else:
-                # 手动计算 fallback
-                l_h = node.left_child.height if node.left_child else 0
-                r_h = node.right_child.height if node.right_child else 0
-                bf = l_h - r_h
-        except Exception:
-            bf = 0
-
-        # 3. 更新界面文字
-        self.status_label.setText(f"正在检查节点 {node.data} (BF = {bf})...")
-        self.visual_area.highlighted_node = node  # 高亮当前节点
-        self.visual_area.update()  # 强制重绘
-
-        # 4. 判断是否失衡 (|BF| > 1)
-        if abs(bf) > 1:
-            self.anim_timer.stop()
-            self.status_label.setText(f"发现失衡节点 {node.data} (BF={bf})，准备旋转修复...")
-
-            # --- [修复点 A] 方法名修正：改为调用 prepare_rotation_animation ---
-            if hasattr(self, 'prepare_rotation_animation'):
-                self.prepare_rotation_animation(node)
-            else:
-                # --- [修复点 B] 保底逻辑修正：调用存在的 rebalance_all ---
-                print("DEBUG: 未找到 prepare_rotation_animation，执行瞬间平衡")
-                self.data_structure.rebalance_all()
-                self.visual_area.node_positions = self.visual_area.calculate_all_node_positions()
-                self.finish_operation("平衡完成 (无旋转动画)")
-            return
-
-        # 5. 如果当前节点平衡，继续向上检查父节点
-        if node.parent:
-            state['current_node'] = node.parent
-        else:
-            # 已经到了根节点，且根节点也平衡
-            self.visual_area.highlighted_node = None
-            self.finish_operation("平衡检查完成，树结构稳定")
 
     def random_build(self):
         self.data_structure.clear()
