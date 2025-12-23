@@ -722,7 +722,7 @@ class AVLTreeNode(BinaryTreeNode):
 
 
 class AVLTree(BinarySearchTree, Serializable):
-    """AVL树实现（健壮版，支持动画分步演示）"""
+    """AVL树实现（支持分步动画版）"""
 
     def _get_height(self, node):
         if not node: return 0
@@ -732,68 +732,53 @@ class AVLTree(BinarySearchTree, Serializable):
         if not node: return 0
         return self._get_height(node.left_child) - self._get_height(node.right_child)
 
-    def update_heights_upwards(self, node):
-        """从当前节点向上更新高度，增加深度限制防止死循环"""
-        depth_limit = 1000  # 防止环导致死循环
-        while node and depth_limit > 0:
-            node.height = 1 + max(self._get_height(node.left_child), self._get_height(node.right_child))
-            node = node.parent
-            depth_limit -= 1
+    def _recalc_heights(self, node):
+        """递归刷新全树高度，确保删除后BF值准确"""
+        if not node: return 0
+        l = self._recalc_heights(node.left_child)
+        r = self._recalc_heights(node.right_child)
+        node.height = 1 + max(l, r)
+        return node.height
 
     def rotate_right(self, y):
-        """右旋操作：将 y 的左子节点 x 提升为父节点"""
+        """右旋"""
         if not y or not y.left_child: return y
-
         x = y.left_child
         T2 = x.right_child
 
-        # 1. 旋转连接
         x.right_child = y
         y.left_child = T2
 
-        # 2. 更新 T2 的父节点
         if T2: T2.parent = y
-
-        # 3. 更新 x 的父节点 (原 y 的父节点)
         x.parent = y.parent
-
-        # 4. 更新 y 的父节点 (现为 x)
         y.parent = x
 
-        # 5. 更新原 y 父节点对 x 的指向
         if x.parent:
             if x.parent.left_child == y:
                 x.parent.left_child = x
             else:
                 x.parent.right_child = x
         else:
-            self.root = x  # x 成为新根
+            self.root = x
 
-        # 6. 更新高度
-        self.update_heights_upwards(y)
+        # 旋转后务必更新涉及节点的高度
+        self._recalc_heights(y)
+        self._recalc_heights(x)
         return x
 
     def rotate_left(self, x):
-        """左旋操作：将 x 的右子节点 y 提升为父节点"""
+        """左旋"""
         if not x or not x.right_child: return x
-
         y = x.right_child
         T2 = y.left_child
 
-        # 1. 旋转连接
         y.left_child = x
         x.right_child = T2
 
-        # 2. 更新 T2 的父节点
         if T2: T2.parent = x
-
-        # 3. 更新 y 的父节点 (原 x 的父节点)
         y.parent = x.parent
-
-        # 4. 更新 x 的父节点 (现为 y)
         x.parent = y
 
-        # 5. 更新原 x 父节点对 y 的指向
         if y.parent:
             if y.parent.left_child == x:
                 y.parent.left_child = y
@@ -802,28 +787,25 @@ class AVLTree(BinarySearchTree, Serializable):
         else:
             self.root = y
 
-        # 6. 更新高度
-        self.update_heights_upwards(x)
+        self._recalc_heights(x)
+        self._recalc_heights(y)
         return y
 
     def insert(self, data, auto_balance=True):
-        """插入接口，auto_balance=False 用于动画分步"""
         if not self.root:
             self.root = AVLTreeNode(data)
             self._size = 1
             return self.root
 
-        # 标准 BST 插入
         new_node = self._insert_bst(self.root, data)
-        self.update_heights_upwards(new_node)
+        self._recalc_heights(self.root)  # 插入后刷新高度
 
         if auto_balance:
-            self.rebalance_from(new_node)
-
+            self.rebalance_all()
         return new_node
 
     def _insert_bst(self, node, data):
-        # 简单的类型转换，防止 int/float 比较错误
+        # 类型兼容处理
         try:
             if not isinstance(data, type(node.data)):
                 data = float(data)
@@ -847,58 +829,93 @@ class AVLTree(BinarySearchTree, Serializable):
                 return node.right_child
             else:
                 return self._insert_bst(node.right_child, data)
-        return node  # 重复元素
+        return node
 
-    def delete(self, data):
-        """删除节点"""
-        super().delete(data)
-        # AVL 删除比较复杂，通常需要从删除点的父节点向上平衡
-        # 简单实现：全树重新平衡（或者您可以补充递归删除逻辑）
-        # 这里为了演示稳定性，暂不自动平衡删除，或者您可以手动调用 rebalance_from root
-        pass
+    def delete(self, data, auto_balance=True):
+        """
+        删除节点（修复了空树崩溃问题）
+        Returns:
+            Node: 平衡检查的起始节点 (即被物理移除节点的父节点)。
+        """
+        # 1. 查找目标节点和它的父节点（为了后续动画逻辑）
+        target_node = self.search(data)  # 假设你有 search 方法
+        parent_of_target = target_node.parent if target_node else None
 
-    def rebalance_from(self, node):
-        """向上检查并平衡，处理所有不平衡节点"""
-        limit = 1000
-        while node and limit > 0:
-            limit -= 1
-            node.height = 1 + max(self._get_height(node.left_child), self._get_height(node.right_child))
-            balance = self._get_balance(node)
+        # 2. 执行物理删除
+        success = super().delete(data)
 
-            # 旋转后，node 的位置会被子节点占据，node 变为子节点
-            # 我们需要记录 node 的原 parent，或者旋转后的新子树根的 parent，以便继续向上
-            next_node = node.parent
+        if success:
+            # --- 修复核心：必须检查 root 是否存在 ---
+            if self.root:
+                # 只有树还不为空时，才刷新高度
+                self._recalc_heights(self.root)
 
-            if balance > 1:
+                if auto_balance:
+                    self.rebalance_all()
+
+                # 返回平衡起点：如果父节点还在，就返回父节点；否则返回新根
+                if parent_of_target and parent_of_target.parent is not None:
+                    # 注意：这里要再次确认 parent 是否还在树里（没被旋转走或连带删除）
+                    return parent_of_target
+                else:
+                    return self.root
+            else:
+
+                return None
+
+        return None
+
+    def rebalance_all(self):
+        """循环直到全树平衡"""
+        while True:
+            node = self.get_lowest_unbalanced_node()
+            if not node: break
+
+            bf = self._get_balance(node)
+            if bf > 1:
                 if self._get_balance(node.left_child) >= 0:
-                    new_root = self.rotate_right(node)
+                    self.rotate_right(node)
                 else:
                     self.rotate_left(node.left_child)
-                    new_root = self.rotate_right(node)
-                next_node = new_root.parent
-
-            elif balance < -1:
+                    self.rotate_right(node)
+            else:
                 if self._get_balance(node.right_child) <= 0:
-                    new_root = self.rotate_left(node)
+                    self.rotate_left(node)
                 else:
                     self.rotate_right(node.right_child)
-                    new_root = self.rotate_left(node)
-                next_node = new_root.parent
+                    self.rotate_left(node)
+            # 每次旋转后刷新高度
+            self._recalc_heights(self.root)
 
-            node = next_node
+    def get_lowest_unbalanced_node(self, start_node=None):
+        """
+        查找最深的不平衡节点。
+        - 如果传入 start_node (插入模式)，则从该点向上查找。
+        - 如果不传 (删除模式)，则扫描全树 (后序遍历) 找最深的一个。
+        """
+        if start_node:
+            curr = start_node
+            limit = 100
+            while curr and limit > 0:
+                if abs(self._get_balance(curr)) > 1:
+                    return curr
+                curr = curr.parent
+                limit -= 1
+            return None
+        else:
+            # 全树扫描：找到最底层的不平衡点（这对删除操作最稳健）
+            return self._find_deepest_unbalanced_recursive(self.root)
 
-    def get_lowest_unbalanced_node(self, start_node):
-        """查找最近的不平衡节点"""
-        curr = start_node
-        limit = 1000
-        while curr and limit > 0:
-            # 确保高度是最新的
-            curr.height = 1 + max(self._get_height(curr.left_child), self._get_height(curr.right_child))
-            balance = self._get_balance(curr)
-            if abs(balance) > 1:
-                return curr
-            curr = curr.parent
-            limit -= 1
+    def _find_deepest_unbalanced_recursive(self, node):
+        if not node: return None
+        # 后序遍历：左右根
+        l = self._find_deepest_unbalanced_recursive(node.left_child)
+        if l: return l
+        r = self._find_deepest_unbalanced_recursive(node.right_child)
+        if r: return r
+
+        if abs(self._get_balance(node)) > 1:
+            return node
         return None
 
     def to_dict(self):
@@ -908,12 +925,18 @@ class AVLTree(BinarySearchTree, Serializable):
 
     @classmethod
     def from_dict(cls, data):
-        obj = cls()
-        # 复用 BinaryTree 的结构恢复，然后重新插入以建立正确的高度和平衡
         temp = BinaryTree.from_dict(data)
         elements = []
-        obj._inorder_traversal(temp.root, elements)
-        obj.clear()
+
+        def collect(n):
+            if n:
+                collect(n.left_child)
+                elements.append(n.data)
+                collect(n.right_child)
+
+        collect(temp.root)
+
+        obj = cls()
         for e in elements:
             obj.insert(e, auto_balance=True)
         return obj

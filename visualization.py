@@ -242,7 +242,7 @@ def lerp(start, end, t):
 
 
 class VisualArea(QWidget):
-    """通用数据结构可视化组件"""
+    """通用数据结构可视化组件 (完整防崩溃融合版)"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -279,6 +279,22 @@ class VisualArea(QWidget):
         self.highlighted_index = highlighted_index
         self.update()
 
+    # --- [安全工具] 坐标转换工具 (防止 SIGABRT 的关键) ---
+    def _safe_int(self, val):
+        """将浮点数安全转换为整数，防止溢出或 NaN"""
+        try:
+            if math.isnan(val) or math.isinf(val): return 0
+            # 限制坐标范围，防止底层绘图库崩溃
+            return max(-10000, min(10000, int(val)))
+        except:
+            return 0
+
+    def _safe_point(self, x, y):
+        return QPoint(self._safe_int(x), self._safe_int(y))
+
+    def _safe_rect(self, x, y, w, h):
+        return QRectF(self._safe_int(x), self._safe_int(y), self._safe_int(w), self._safe_int(h))
+
     def _get_safe_pos(self, key):
         pos = self.node_positions.get(key)
         if not pos: return None
@@ -290,89 +306,39 @@ class VisualArea(QWidget):
         except:
             return None
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        self._draw_background_grid(painter)
-
-        if self.data_structure is None:
-            painter.setFont(QFont("Microsoft YaHei", 14))
-            painter.setPen(QColor(156, 163, 175))
-            painter.drawText(self.rect(), Qt.AlignCenter, "可视化区域准备就绪")
-            return
-
-        self.current_frame_node_pos = {}
-
-        try:
-            if isinstance(self.data_structure, list):
-                if len(self.data_structure) > 0 and isinstance(self.data_structure[0], HuffmanStructNode):
-                    self._draw_huffman_array_process(painter)
-            elif isinstance(self.data_structure, (Stack, SequenceList)):
-                self._draw_linear_structure(painter)
-            elif isinstance(self.data_structure, LinkedList):
-                self._draw_linked_list(painter)
-            elif isinstance(self.data_structure, BinaryTree) or isinstance(self.data_structure, BinarySearchTree):
-                # 关键：检查是否在进行 Morph 变形动画
-                if self.anim_state.get('type') == 'morph':
-                    self._draw_tree_morph(painter)
-                else:
-                    self._draw_tree(painter)
-        except RecursionError:
-            painter.setPen(Qt.red)
-            painter.setFont(QFont("Arial", 12, QFont.Bold))
-            painter.drawText(20, 40, "Error: Tree Cycle Detected! (Recursion Limit)")
-        except Exception as e:
-            # print(e)
-            pass
-
-        # 绘制浮动层（BST Search/Insert 球体）
-        anim_type = self.anim_state.get('type')
-        if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
-            self._draw_bst_overlay(painter)
-
-        if self.traversal_text:
-            self._draw_traversal_text(painter)
-
-    def _draw_background_grid(self, painter):
-        painter.save()
-        painter.setPen(QPen(QColor(243, 244, 246), 1))
-        step = 40
-        for x in range(0, self.width(), step):
-            painter.drawLine(x, 0, x, self.height())
-        for y in range(0, self.height(), step):
-            painter.drawLine(0, y, self.width(), y)
-        if isinstance(self.data_structure, list) and len(self.data_structure) > 0 and isinstance(self.data_structure[0],
-                                                                                                 HuffmanStructNode):
-            painter.setPen(QPen(QColor(209, 213, 219), 2, Qt.DashLine))
-            painter.drawLine(220, 0, 220, self.height())
-        painter.restore()
-
-    def _draw_traversal_text(self, painter):
-        painter.save()
-        painter.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
-        painter.setPen(QColor(37, 99, 235))
-        rect = self.rect()
-        text_rect = rect.adjusted(20, rect.height() - 80, -20, -20)
-        painter.drawText(text_rect, Qt.AlignCenter | Qt.TextWordWrap, self.traversal_text)
-        painter.restore()
-
-    # === 关键修复：防死循环的树坐标计算 ===
+    # --- [核心修复] 布局计算 (统一入口 + 防死循环) ---
     def calculate_all_node_positions(self):
-        """计算树节点位置（防死循环版）"""
+        """计算树节点位置（统一入口）"""
         positions = {}
-        if not self.data_structure or self.data_structure.is_empty():
+
+        # 1. 基础检查
+        if not self.data_structure:
             return positions
 
+        # 兼容不同类型的树结构引用
         tree = self.data_structure
+        # 只要有 root 属性就可以尝试计算
+        root = getattr(tree, 'root', None)
+
+        if not root:
+            return positions
+
+        # 2. 计算树高 (防止递归溢出)
         try:
-            tree_height = self._get_tree_height(tree.root)
+            tree_height = self._get_tree_height(root)
         except RecursionError:
             return positions
 
+        # 3. 计算布局参数
         area_width = self.width()
+        if area_width < 50: area_width = 800  # 防止宽度过小导致除以零
+
         start_x = area_width // 2
         start_y = 50
-        ideal_spacing = area_width / (2 ** (min(10, tree_height) - 1) + 1)
+
+        # 动态调整间距
+        denominator = (2 ** (min(10, tree_height) - 1) + 1)
+        ideal_spacing = area_width / denominator if denominator > 0 else 50
         base_spacing = max(min(ideal_spacing, 120), 35)
 
         visited = set()
@@ -385,358 +351,279 @@ class VisualArea(QWidget):
             positions[node] = (x, y)
             next_y = y + self.tree_level_spacing
             next_spacing = level_spacing * 0.55
-            if node.left_child:
-                traverse(node.left_child, x - level_spacing, next_y, next_spacing)
-            if node.right_child:
-                traverse(node.right_child, x + level_spacing, next_y, next_spacing)
+
+            # 安全获取左右子节点
+            left = getattr(node, 'left_child', None)
+            right = getattr(node, 'right_child', None)
+
+            if left:
+                traverse(left, x - level_spacing, next_y, next_spacing)
+            if right:
+                traverse(right, x + level_spacing, next_y, next_spacing)
 
             visited.remove(node)
 
         try:
-            traverse(tree.root, start_x, start_y, base_spacing)
+            traverse(root, start_x, start_y, base_spacing)
         except RecursionError:
             pass
+
         return positions
-
-    # === AVL Morph 动画绘制 ===
-    def _draw_tree_morph(self, painter):
-        state = self.anim_state
-        start_pos = state.get('start_positions', {})
-        end_pos = state.get('end_positions', {})
-        progress = state.get('progress', 0.0)
-
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        def get_curr_pos(node):
-            p1 = start_pos.get(node)
-            p2 = end_pos.get(node)
-            if not p1: p1 = p2
-            if not p2: return None
-            x = p1[0] + (p2[0] - p1[0]) * progress
-            y = p1[1] + (p2[1] - p1[1]) * progress
-            return (x, y)
-
-        all_nodes = list(end_pos.keys())
-
-        # Draw Edges
-        painter.setPen(QPen(QColor(156, 163, 175), 2))
-        for node in all_nodes:
-            curr = get_curr_pos(node)
-            if not curr: continue
-            if node.left_child:
-                child_pos = get_curr_pos(node.left_child)
-                if child_pos: painter.drawLine(int(curr[0]), int(curr[1]), int(child_pos[0]), int(child_pos[1]))
-            if node.right_child:
-                child_pos = get_curr_pos(node.right_child)
-                if child_pos: painter.drawLine(int(curr[0]), int(curr[1]), int(child_pos[0]), int(child_pos[1]))
-
-        # Draw Nodes
-        for node in all_nodes:
-            curr = get_curr_pos(node)
-            if not curr: continue
-            painter.setBrush(QBrush(QColor(186, 230, 253)))
-            if node == state.get('pivot') or node == state.get('new_root'):
-                painter.setBrush(QBrush(QColor(252, 211, 77)))
-            painter.setPen(QPen(QColor(31, 41, 55), 2))
-            radius = self.node_radius
-            painter.drawEllipse(QPoint(int(curr[0]), int(curr[1])), radius, radius)
-            painter.setPen(QPen(QColor(0, 0, 0), 1))
-            painter.setFont(QFont("Arial", 9, QFont.Bold))
-            painter.drawText(QRectF(curr[0] - radius, curr[1] - radius, radius * 2, radius * 2), Qt.AlignCenter,
-                             str(node.data))
-        painter.restore()
-
-    def _draw_tree(self, painter):
-        tree = self.data_structure
-        if tree.is_empty():
-            painter.setFont(QFont("Microsoft YaHei", 12, QFont.Italic))
-            painter.setPen(QColor(150, 150, 150))
-            painter.drawText(self.rect(), Qt.AlignCenter, "空树")
-            return
-
-        self.bfs_index_map = {}
-        if tree.root:
-            queue = [tree.root]
-            idx = 0
-            visited_bfs = set()
-            while queue:
-                node = queue.pop(0)
-                if node in visited_bfs: continue
-                visited_bfs.add(node)
-                self.bfs_index_map[node] = idx
-                idx += 1
-                if node.left_child: queue.append(node.left_child)
-                if node.right_child: queue.append(node.right_child)
-
-        try:
-            tree_height = self._get_tree_height(tree.root)
-        except RecursionError:
-            tree_height = 10
-
-        area_width = self.width()
-        start_x = area_width // 2
-        start_y = 50
-        ideal_spacing = area_width / (2 ** (min(10, tree_height) - 1) + 1)
-        base_spacing = max(min(ideal_spacing, 120), 35)
-
-        self._draw_tree_node(painter, tree.root, start_x, start_y, base_spacing, tree_height, set())
-
-        painter.setPen(QPen(QColor(107, 114, 128), 1))
-        painter.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
-        t_type = "普通二叉树"
-        if isinstance(tree, BinarySearchTree): t_type = "二叉搜索树"
-        if type(tree).__name__ == 'AVLTree': t_type = "AVL树 (自平衡)"
-        painter.drawText(20, 30, 400, 30, Qt.AlignLeft, f"{t_type} - 节点数: {tree.length()}")
 
     def _get_tree_height(self, node, depth=0):
         if not node or depth > 20: return 0
-        return 1 + max(self._get_tree_height(node.left_child, depth + 1),
-                       self._get_tree_height(node.right_child, depth + 1))
+        left = getattr(node, 'left_child', None)
+        right = getattr(node, 'right_child', None)
+        return 1 + max(self._get_tree_height(left, depth + 1),
+                       self._get_tree_height(right, depth + 1))
 
-    def _draw_tree_node(self, painter, node, x, y, level_spacing, remaining_height, visited):
+    # --- [核心修复] 绘图事件 (安全分发) ---
+    def paintEvent(self, event):
+        # 窗口太小时不绘图，防止计算错误
+        if self.width() < 10 or self.height() < 10:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        self._draw_background_grid(painter)
+
+        if self.data_structure is None:
+            self._draw_placeholder(painter)
+            return
+
+        self.current_frame_node_pos = {}
+        state = self.anim_state
+
+        try:
+            # --- 1. Morph 动画 (最高优先级) ---
+            if state and state.get('type') == 'morph':
+                if state.get('start_positions') and state.get('end_positions'):
+                    self.draw_morph_frame(painter, state)
+                return
+
+                # --- 2. 线性结构 ---
+            if isinstance(self.data_structure, (Stack, SequenceList)):
+                self._draw_linear_structure(painter)
+
+            # --- 3. 链表 ---
+            elif isinstance(self.data_structure, LinkedList):
+                self._draw_linked_list(painter)
+
+            # --- 4. 哈夫曼树 ---
+            elif isinstance(self.data_structure, list):
+                if len(self.data_structure) > 0 and isinstance(self.data_structure[0], HuffmanStructNode):
+                    self._draw_huffman_array_process(painter)
+
+            # --- 5. 二叉树/BST/AVL (统一使用预计算布局) ---
+            elif hasattr(self.data_structure, 'root'):
+                # 即使是静态，也先计算位置，确保逻辑统一
+                self.node_positions = self.calculate_all_node_positions()
+                root = getattr(self.data_structure, 'root', None)
+                if root:
+                    self._draw_tree_recursive(painter, root)
+                    self._draw_tree_info(painter)
+                else:
+                    self._draw_empty_tree_msg(painter)
+
+        except Exception as e:
+            # 捕获所有绘图异常，防止程序直接崩溃
+            print(f"Paint Error: {e}")
+            # traceback.print_exc()
+
+        # 绘制浮动层
+        anim_type = self.anim_state.get('type')
+        if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
+            self._draw_bst_overlay(painter)
+
+        if self.traversal_text:
+            self._draw_traversal_text(painter)
+
+    # === [新功能] 统一树形结构绘制逻辑 ===
+    def _draw_tree_recursive(self, painter, node):
         if not node: return
 
-        if node in visited:
-            painter.setPen(Qt.red)
-            painter.drawText(int(x), int(y), "CYCLE!")
-            return
-        visited.add(node)
-
-        self.current_frame_node_pos[node] = (x, y)
-
-        radius = self.node_radius
-        next_y = y + self.tree_level_spacing
-        next_level_spacing = level_spacing * 0.55
-
-        if node.left_child:
-            left_x = x - level_spacing
-            self._draw_tree_edge(painter, x, y, left_x, next_y, radius, is_left=True, child_node=node.left_child)
-            self._draw_tree_node(painter, node.left_child, left_x, next_y, next_level_spacing, remaining_height - 1,
-                                 visited)
-        if node.right_child:
-            right_x = x + level_spacing
-            self._draw_tree_edge(painter, x, y, right_x, next_y, radius, is_left=False, child_node=node.right_child)
-            self._draw_tree_node(painter, node.right_child, right_x, next_y, next_level_spacing, remaining_height - 1,
-                                 visited)
-
-        # 节点绘制逻辑
-        anim_state = self.anim_state
-        is_target = (anim_state.get('target_node') == node)
-        anim_type = anim_state.get('type', '')
-        phase = anim_state.get('phase', '')
-        progress = anim_state.get('progress', 0.0)
-
-        opacity = 1.0
-        bg_color = None
-        if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
-            opacity = 0.2
-            path_history = anim_state.get('path_history', [])
-            if node in path_history or node == anim_state.get('current_node'): opacity = 1.0
-            status = anim_state.get('status')
-            if status == 'found' and node == anim_state.get('current_node'):
-                bg_color = QColor(34, 197, 94)
-            elif status == 'delete_found' and node == anim_state.get('current_node'):
-                bg_color = QColor(220, 38, 38)
-
-        scale = 1.0
-        if is_target:
-            if anim_type == 'tree_insert' or anim_type == 'huffman_merge':
-                if phase == 'extend_line':
-                    scale = 0.0
-                elif phase == 'grow_node':
-                    scale = progress
-            elif anim_type == 'tree_delete' and phase == 'fade':
-                opacity = 1.0 - progress
-
-        if scale <= 0.01:
-            visited.remove(node)
+        # 必须从 node_positions 获取坐标，如果没有则跳过
+        if node not in self.node_positions:
             return
 
-        painter.save()
-        painter.setOpacity(opacity)
-        if scale != 1.0:
-            painter.translate(x, y);
-            painter.scale(scale, scale);
-            painter.translate(-x, -y)
+        x, y = self.node_positions[node]
+        self.current_frame_node_pos[node] = (x, y)  # 记录下来供 overlay 使用
 
-        if bg_color:
-            painter.setBrush(QBrush(bg_color))
-        elif hasattr(self, 'highlighted_node') and self.highlighted_node == node:
-            painter.setBrush(QBrush(self.highlight_color))
-        else:
-            if isinstance(self.data_structure, BinarySearchTree):
-                painter.setBrush(QBrush(QColor(254, 215, 170)))
-            else:
-                painter.setBrush(QBrush(QColor(186, 230, 253)))
+        left = getattr(node, 'left_child', None)
+        right = getattr(node, 'right_child', None)
 
         painter.setPen(QPen(QColor(31, 41, 55), 2))
-        painter.drawEllipse(QPoint(int(x), int(y)), radius, radius)
-        painter.setPen(QPen(QColor(0, 0, 0), 1))
+
+        # 画连线
+        if left and left in self.node_positions:
+            lx, ly = self.node_positions[left]
+            painter.drawLine(self._safe_point(x, y), self._safe_point(lx, ly))
+            self._draw_tree_recursive(painter, left)
+
+        if right and right in self.node_positions:
+            rx, ry = self.node_positions[right]
+            painter.drawLine(self._safe_point(x, y), self._safe_point(rx, ry))
+            self._draw_tree_recursive(painter, right)
+
+        # 画节点
+        self.draw_single_node(painter, node, x, y, self.anim_state)
+
+    def draw_single_node(self, painter, node, x, y, state):
+        radius = self.node_radius
+        bg_color = QColor(186, 230, 253)  # 默认浅蓝
+        border_color = QColor(31, 41, 55)
+
+        is_pivot = (state.get('pivot') == node)
+        is_new_root = (state.get('new_root') == node)
+        is_highlight = (self.highlighted_node == node)
+
+        if is_pivot:
+            bg_color = QColor(252, 211, 77)
+        elif is_new_root:
+            bg_color = QColor(16, 185, 129)
+        elif is_highlight:
+            bg_color = self.highlight_color
+
+        painter.setBrush(QBrush(bg_color))
+        painter.setPen(QPen(border_color, 2))
+
+        # 使用 safe_point 防止崩溃
+        center = self._safe_point(x, y)
+        painter.drawEllipse(center, radius, radius)
+
+        painter.setPen(QPen(Qt.black, 1))
         painter.setFont(QFont("Arial", 9, QFont.Bold))
-        painter.drawText(QRectF(x - radius, y - radius, radius * 2, radius * 2), Qt.AlignCenter, str(node.data))
 
-        if not isinstance(self.data_structure, BinarySearchTree):
-            real_index = self.bfs_index_map.get(node, -1)
-            if real_index != -1:
-                painter.setPen(QPen(Qt.red));
-                painter.setFont(QFont("Arial", 8, QFont.Bold))
-                painter.drawText(int(x + radius / 2), int(y - radius), 30, 15, Qt.AlignLeft, str(real_index))
-        painter.restore()
-        visited.remove(node)
+        rect = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
+        painter.drawText(rect, Qt.AlignCenter, str(node.data))
 
-    def _draw_tree_edge(self, painter, px, py, cx, cy, radius, is_left, child_node=None):
-        state = self.anim_state
-        is_target_child = (state.get('target_node') == child_node)
-        anim_type = state.get('type', '')
-        phase = state.get('phase', '')
-        progress = state.get('progress', 0.0)
-        draw_ratio = 1.0
-        opacity = 1.0
-        if anim_type in ['bst_search', 'bst_insert', 'bst_delete']:
-            opacity = 0.1
-            path_history = state.get('path_history', [])
-            if child_node in path_history: opacity = 1.0
-        if is_target_child:
-            if anim_type == 'tree_insert' or anim_type == 'huffman_merge':
-                if phase == 'extend_line':
-                    draw_ratio = progress
-                elif phase == 'grow_node':
-                    draw_ratio = 1.0
-            elif anim_type == 'tree_delete' and phase == 'fade':
-                opacity = 1.0 - progress
-        if draw_ratio <= 0.01: return
-        angle = math.atan2(cy - py, cx - px)
-        sx = px + radius * math.cos(angle);
-        sy = py + radius * math.sin(angle)
-        ex = cx - radius * math.cos(angle);
-        ey = cy - radius * math.sin(angle)
+    def draw_morph_frame(self, painter, state):
+        """Morph 动画帧绘制"""
+        t = state.get('progress', 0.0)
+        start_pos = state['start_positions']
+        end_pos = state['end_positions']
+
+        current_positions = {}
+        all_nodes = set(start_pos.keys()) | set(end_pos.keys())
+
+        for node in all_nodes:
+            p_start = start_pos.get(node)
+            p_end = end_pos.get(node)
+
+            cx, cy, opacity = 0, 0, 1.0
+
+            if p_start and p_end:
+                cx = p_start[0] + (p_end[0] - p_start[0]) * t
+                cy = p_start[1] + (p_end[1] - p_start[1]) * t
+            elif p_start and not p_end:
+                cx, cy = p_start
+                opacity = 1.0 - t
+            elif not p_start and p_end:
+                cx, cy = p_end
+                opacity = t
+
+            if opacity < 0: opacity = 0
+            if opacity > 1: opacity = 1
+            current_positions[node] = (cx, cy, opacity)
+
+        # 绘制连线
+        painter.setPen(QPen(QColor(100, 100, 100), 2))
+        for node, (cx, cy, opacity) in current_positions.items():
+            parent = getattr(node, 'parent', None)
+            if parent and parent in current_positions:
+                px, py, p_opacity = current_positions[parent]
+                line_opacity = min(opacity, p_opacity)
+                if line_opacity > 0.05:
+                    painter.setOpacity(line_opacity)
+                    painter.drawLine(self._safe_point(cx, cy), self._safe_point(px, py))
+
+        # 绘制节点
+        for node, (cx, cy, opacity) in current_positions.items():
+            if opacity > 0.05:
+                painter.setOpacity(opacity)
+                self.draw_single_node(painter, node, cx, cy, state)
+
+        painter.setOpacity(1.0)
+
+    # === [辅助绘制] 占位符与网格 ===
+    def _draw_placeholder(self, painter, text="可视化区域准备就绪"):
+        painter.setFont(QFont("Microsoft YaHei", 14))
+        painter.setPen(QColor(156, 163, 175))
+        painter.drawText(self.rect(), Qt.AlignCenter, text)
+
+    def _draw_empty_tree_msg(self, painter):
+        painter.setFont(QFont("Microsoft YaHei", 12, QFont.Italic))
+        painter.setPen(QColor(150, 150, 150))
+        painter.drawText(self.rect(), Qt.AlignCenter, "空树 (Empty Tree)")
+
+    def _draw_tree_info(self, painter):
+        painter.setPen(QPen(QColor(107, 114, 128), 1))
+        painter.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
+        t_type = type(self.data_structure).__name__
+        count = 0
+        if hasattr(self.data_structure, 'length'):
+            count = self.data_structure.length()
+        elif hasattr(self.data_structure, '_size'):
+            count = self.data_structure._size
+        painter.drawText(20, 30, 400, 30, Qt.AlignLeft, f"{t_type} - 节点数: {count}")
+
+    def _draw_background_grid(self, painter):
         painter.save()
-        painter.setOpacity(opacity)
-        painter.setPen(QPen(QColor(156, 163, 175), 2))
-        if draw_ratio < 1.0:
-            dex = sx + (ex - sx) * draw_ratio;
-            dey = sy + (ey - sy) * draw_ratio
-            painter.drawLine(int(sx), int(sy), int(dex), int(dey))
-        else:
-            painter.drawLine(int(sx), int(sy), int(ex), int(ey))
-            if not isinstance(self.data_structure, BinarySearchTree):
-                mx = (sx + ex) / 2;
-                my = (sy + ey) / 2
-                painter.setFont(QFont("Arial", 8));
-                painter.setPen(QPen(QColor(239, 68, 68)))
-                offset_x = -8 if is_left else 4
-                painter.drawText(int(mx + offset_x), int(my), 15, 15, Qt.AlignCenter, "0" if is_left else "1")
+        painter.setPen(QPen(QColor(243, 244, 246), 1))
+        step = 40
+        w, h = self.width(), self.height()
+        if w > 0 and h > 0:
+            for x in range(0, w, step):
+                painter.drawLine(x, 0, x, h)
+            for y in range(0, h, step):
+                painter.drawLine(0, y, w, y)
+        if isinstance(self.data_structure, list) and len(self.data_structure) > 0 and isinstance(self.data_structure[0],
+                                                                                                 HuffmanStructNode):
+            painter.setPen(QPen(QColor(209, 213, 219), 2, Qt.DashLine))
+            painter.drawLine(220, 0, 220, h)
         painter.restore()
 
-    def _draw_bst_overlay(self, painter):
-        # 复制之前 VisualArea 中 _draw_bst_overlay 的逻辑，保持不变
-        state = self.anim_state
-        target_val = state.get('target_val')
-        curr_node = state.get('current_node')
-        next_node = state.get('next_node')
-        progress = state.get('progress', 0.0)
-        status = state.get('status')
-        if not curr_node:
-            if status == 'insert_found' and self.data_structure.is_empty():
-                sx, sy = self.width() // 2, 50
-                draw_x, draw_y = sx, sy
-            else:
-                return
-        else:
-            start_pos = self.current_frame_node_pos.get(curr_node)
-            if not start_pos: return
-            sx, sy = start_pos
-            draw_x, draw_y = sx, sy
-        if status in ['appear', 'compare']:
-            draw_x = sx - 40;
-            draw_y = sy - 40
-        elif status == 'move':
-            if next_node:
-                end_pos = self.current_frame_node_pos.get(next_node)
-                if end_pos:
-                    ex, ey = end_pos
-                    draw_x = lerp(sx, ex, progress);
-                    draw_y = lerp(sy, ey, progress)
-            else:
-                direction = -1 if target_val < curr_node.data else 1
-                ex = sx + direction * 60;
-                ey = sy + 60
-                draw_x = lerp(sx, ex, progress);
-                draw_y = lerp(sy, ey, progress)
-        elif status == 'insert_found':
-            direction = -1 if not self.data_structure.is_empty() and target_val < curr_node.data else 1
-            draw_x = sx + direction * 60;
-            draw_y = sy + 60
-        elif status in ['delete_found', 'found']:
-            draw_x, draw_y = sx, sy
+    def _draw_traversal_text(self, painter):
         painter.save()
-        scale = 1.0
-        bg_color = QColor(59, 130, 246)
-        if status == 'found':
-            bg_color = QColor(34, 197, 94); scale = 1.2
-        elif status == 'not_found':
-            bg_color = QColor(239, 68, 68)
-        elif status == 'insert_found':
-            bg_color = QColor(16, 185, 129); scale = 1.1
-        elif status == 'delete_found':
-            bg_color = QColor(220, 38, 38); scale = 1.2
-        painter.translate(draw_x, draw_y);
-        painter.scale(scale, scale)
-        painter.setPen(Qt.NoPen);
-        painter.setBrush(QColor(bg_color.red(), bg_color.green(), bg_color.blue(), 100))
-        painter.drawEllipse(QPoint(0, 0), 20, 20)
-        painter.setBrush(bg_color);
-        painter.setPen(QPen(Qt.white, 2))
-        painter.drawEllipse(QPoint(0, 0), 15, 15)
-        painter.setPen(Qt.white);
-        painter.setFont(QFont("Arial", 10, QFont.Bold))
-        painter.drawText(QRectF(-15, -15, 30, 30), Qt.AlignCenter, str(target_val))
+        painter.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
+        painter.setPen(QColor(37, 99, 235))
+        rect = self.rect()
+        text_rect = rect.adjusted(20, rect.height() - 80, -20, -20)
+        painter.drawText(text_rect, Qt.AlignCenter | Qt.TextWordWrap, self.traversal_text)
         painter.restore()
+
+    # === [遗留业务逻辑] 栈、顺序表、链表、哈夫曼树（完整保留） ===
 
     def _draw_linear_structure(self, painter):
         ds = self.data_structure
         length = ds.length()
         area_width = self.width()
         area_height = self.height()
-
-        # --- 1. 检查是否为栈 ---
         is_stack = isinstance(ds, Stack)
 
         if is_stack:
-            # --- 栈 (Stack) 的垂直绘制逻辑 (保留原有代码逻辑) ---
             if length == 0:
-                painter.setFont(QFont("Microsoft YaHei", 12, QFont.Italic))
-                painter.setPen(QColor(150, 150, 150))
-                painter.drawText(self.rect(), Qt.AlignCenter, "空结构")
+                self._draw_placeholder(painter, "空结构")
                 return
-
-            # 重新计算栈的垂直布局参数
             stack_height = length * self.cell_height + (length - 1) * self.cell_spacing
             start_x = max(10, (area_width - self.cell_width) // 2)
             start_y = (area_height + stack_height) // 2
-            if start_y + 40 > area_height:
-                start_y = area_height - 40
+            if start_y + 40 > area_height: start_y = area_height - 40
 
-            # 遍历绘制栈元素和动画效果 (push/pop)
             for i in range(length):
                 painter.save()
                 x_pos = start_x
                 y_pos = start_y - i * (self.cell_height + self.cell_spacing)
-
-                # --- 原有栈的绘制和动画逻辑 ---
                 bg_color = QColor(219, 234, 254)
-                if i == self.highlighted_index:
-                    bg_color = QColor(250, 204, 21)
+                if i == self.highlighted_index: bg_color = QColor(250, 204, 21)
 
-                # 栈的 push/pop 动画状态处理
                 if self.anim_state and self.anim_state.get('index') == i:
                     anim_type = self.anim_state.get('type')
                     if anim_type == 'push':
                         scale = self.anim_state.get('scale', 1.0)
                         cx, cy = x_pos + self.cell_width / 2, y_pos + self.cell_height / 2
-                        painter.translate(cx, cy)
-                        painter.scale(scale, scale)
+                        painter.translate(cx, cy);
+                        painter.scale(scale, scale);
                         painter.translate(-cx, -cy)
                         if scale < 0.8:
                             bg_color = QColor(16, 185, 129)
@@ -752,24 +639,20 @@ class VisualArea(QWidget):
 
                 painter.setBrush(QBrush(bg_color))
                 painter.setPen(QPen(QColor(30, 58, 138), 2))
-                painter.drawRect(int(x_pos), int(y_pos), self.cell_width, self.cell_height)
-
-                # 绘制索引和值
+                painter.drawRect(self._safe_rect(x_pos, y_pos, self.cell_width, self.cell_height))
                 painter.setPen(QPen(QColor(107, 114, 128), 1))
                 painter.setFont(QFont("Arial", 9))
-                painter.drawText(int(x_pos - 35), int(y_pos), 30, self.cell_height, Qt.AlignRight | Qt.AlignVCenter,
-                                 str(i))
+                painter.drawText(self._safe_rect(x_pos - 35, y_pos, 30, self.cell_height),
+                                 Qt.AlignRight | Qt.AlignVCenter, str(i))
                 painter.setPen(QPen(QColor(17, 24, 39), 1))
                 painter.setFont(QFont("Arial", 11, QFont.Bold))
                 try:
-                    painter.drawText(int(x_pos), int(y_pos), self.cell_width, self.cell_height, Qt.AlignCenter,
-                                     str(ds[i]))
+                    painter.drawText(self._safe_rect(x_pos, y_pos, self.cell_width, self.cell_height),
+                                     Qt.AlignCenter, str(ds[i]))
                 except:
                     pass
-
                 painter.restore()
 
-            # 绘制栈底和栈顶标签
             if length > 0:
                 bottom_y = start_y + self.cell_height + 5
                 painter.setPen(QPen(QColor(75, 85, 99), 2))
@@ -778,27 +661,16 @@ class VisualArea(QWidget):
                 top_y = start_y - (length - 1) * (self.cell_height + self.cell_spacing) - 30
                 painter.setPen(QPen(QColor(220, 38, 38), 2))
                 painter.drawText(int(start_x), int(top_y), self.cell_width, 25, Qt.AlignCenter, "Stack Top")
+            return
 
-            return  # 栈绘制完成后退出
-
-        # --- 顺序表 (SequenceList) 的水平内存框和动画逻辑 ---
-
-        # 绘制参数
+        # SequenceList
         mem_w = self.cell_width + 10
         mem_h = self.cell_height + 10
         mem_spacing = self.cell_spacing + 5
         max_capacity = max(length + 2, 10)
         total_width = max_capacity * mem_w + (max_capacity - 1) * mem_spacing
-
-        # 居中显示或靠左显示
-        if total_width > area_width - 40:
-            start_x = 20
-        else:
-            start_x = (area_width - total_width) // 2
-
+        start_x = 20 if total_width > area_width - 40 else (area_width - total_width) // 2
         base_y = area_height // 2 - mem_h // 2
-
-        # 动画状态解析
         state = self.anim_state
         anim_type = state.get('type', '')
         phase = state.get('phase', '')
@@ -807,139 +679,92 @@ class VisualArea(QWidget):
         shift_idx = state.get('shift_index', -1)
         new_val = state.get('new_val')
 
-        # --- 3. 绘制内存框和索引 ---
         painter.save()
         painter.setPen(QPen(QColor(209, 213, 219), 1, Qt.DotLine))
         painter.setBrush(Qt.NoBrush)
         painter.setFont(QFont("Arial", 8, QFont.Bold))
-
         for i in range(max_capacity):
             mx = start_x + i * (mem_w + mem_spacing)
-            my = base_y
-            painter.drawRect(int(mx), int(my), mem_w, mem_h)
+            painter.drawRect(self._safe_rect(mx, base_y, mem_w, mem_h))
             painter.setPen(QPen(QColor(220, 38, 38)))
-            painter.drawText(int(mx), int(my - 15), 30, 15, Qt.AlignLeft, str(i))
-
+            painter.drawText(self._safe_rect(mx, base_y - 15, 30, 15), Qt.AlignLeft, str(i))
+            painter.setPen(QPen(QColor(209, 213, 219), 1, Qt.DotLine))
         painter.restore()
 
-        # --- 4. 绘制数据节点 (修正缩进和位移逻辑) ---
         for i in range(length):
             painter.save()
-
             offset_x = (mem_w - self.cell_width) / 2
             offset_y = (mem_h - self.cell_height) / 2
-
             ox_pos = start_x + i * (mem_w + mem_spacing) + offset_x
             oy_pos = base_y + offset_y
-
             x_pos = ox_pos
             y_pos = oy_pos
             bg_color = QColor(219, 234, 254)
             opacity = 1.0
 
-            # 顺序表插入动画
             if anim_type == 'seq_insert':
                 move_unit = (mem_w + mem_spacing)
-
-                # 插入位移
                 if i >= target_idx:
                     if phase == 'shift_forward':
-                        # 元素向后位移
                         if i > shift_idx:
-                            # 已经完成移动的元素
                             x_pos += move_unit
                         elif i == shift_idx:
-                            # 当前正在移动的元素
                             x_pos += progress * move_unit
                     elif phase in ['hover', 'move_in', 'shift_complete']:
-                        # 移位完成或悬浮阶段，所有后置元素已到位
                         x_pos += move_unit
-
-            # 顺序表删除动画
             elif anim_type == 'seq_delete':
                 move_unit = (mem_w + mem_spacing)
-
-                # 1. Target Node Logic (Only applies before data array mutation in move_out/flash)
                 if i == target_idx:
                     if phase == 'flash_target':
                         flash_intensity = abs(math.sin(state.get('flash_count', 0) * math.pi / 2))
                         bg_color = QColor.fromRgb(255, 100 + int(150 * flash_intensity),
                                                   100 + int(150 * flash_intensity))
-
                     elif phase == 'move_out':
-                        # Node moves out and fades
                         y_pos -= progress * 100
                         opacity = 1.0 - progress
-
-                    # Skip drawing if faded out completely (relies on opacity calculation)
                     if opacity <= 0.01 and phase not in ['flash_target']:
-                        painter.restore()
+                        painter.restore();
                         continue
-
-                # 2. Shifting Logic (applies to elements i >= target_idx)
-                # NOTE: Array is already shrunk for these phases, i=target_idx is the first shifting element.
                 if i >= target_idx and phase == 'shift_backward':
                     if i < shift_idx:
-                        # Finished moving (visual offset is 0)
                         pass
                     elif i == shift_idx:
-                        # Moving (visual offset from +move_unit to 0)
                         x_pos += move_unit * (1.0 - progress)
                     elif i > shift_idx:
-                        # Waiting (visual offset is +move_unit)
                         x_pos += move_unit
-
-
             elif anim_type == 'seq_search' and i == state.get('current_idx'):
                 bg_color = QColor(255, 215, 0)
+            if i == self.highlighted_index: bg_color = QColor(250, 204, 21)
 
-            # 保持高亮（ Locate 操作的结果）
-            if i == self.highlighted_index:
-                bg_color = QColor(250, 204, 21)
-
-            # 绘制节点 (修正后的正确缩进)
             painter.setOpacity(opacity)
             painter.setBrush(QBrush(bg_color))
             painter.setPen(QPen(QColor(30, 58, 138), 2))
-            painter.drawRect(int(x_pos), int(y_pos), self.cell_width, self.cell_height)
-
-            # 绘制数值 (修正后的正确缩进)
+            painter.drawRect(self._safe_rect(x_pos, y_pos, self.cell_width, self.cell_height))
             painter.setPen(QPen(QColor(17, 24, 39), 1))
             painter.setFont(QFont("Arial", 11, QFont.Bold))
             try:
-                painter.drawText(int(x_pos), int(y_pos), self.cell_width, self.cell_height, Qt.AlignCenter,
+                painter.drawText(self._safe_rect(x_pos, y_pos, self.cell_width, self.cell_height), Qt.AlignCenter,
                                  str(ds[i]))
             except:
                 pass
-
             painter.restore()
 
-        # --- 5. 绘制悬浮的新节点 ---
         if anim_type == 'seq_insert' and phase in ['hover', 'move_in', 'shift_forward']:
             painter.save()
-
-            # 节点位置始终计算在目标插入位置上方
+            offset_x = (mem_w - self.cell_width) / 2
+            offset_y = (mem_h - self.cell_height) / 2
             tx = start_x + target_idx * (mem_w + mem_spacing) + offset_x
-
             ty_hover = base_y - 80
             ty_target = base_y + offset_y
-
             y_pos_new = ty_hover
-
-            if phase == 'move_in':
-                y_pos_new = lerp(ty_hover, ty_target, progress)
-
-            # 绘制悬浮/下落的新节点
-            painter.setBrush(QBrush(QColor(16, 185, 129)))  # 插入绿色
+            if phase == 'move_in': y_pos_new = lerp(ty_hover, ty_target, progress)
+            painter.setBrush(QBrush(QColor(16, 185, 129)))
             painter.setPen(QPen(QColor(5, 150, 105), 2))
-            painter.drawRect(int(tx), int(y_pos_new), self.cell_width, self.cell_height)
-
+            painter.drawRect(self._safe_rect(tx, y_pos_new, self.cell_width, self.cell_height))
             painter.setPen(QPen(Qt.white))
-            painter.drawText(int(tx), int(y_pos_new), self.cell_width, self.cell_height, Qt.AlignCenter,
+            painter.drawText(self._safe_rect(tx, y_pos_new, self.cell_width, self.cell_height), Qt.AlignCenter,
                              str(new_val))
-
             painter.restore()
-
 
     def _draw_linked_list(self, painter):
         ll = self.data_structure
@@ -950,8 +775,6 @@ class VisualArea(QWidget):
         progress = state.get('progress', 0.0)
         target_idx = state.get('target_idx', -1)
         new_val = state.get('new_val', '')
-        area_width = self.width()
-        area_height = self.height()
         node_w = self.cell_width
         node_h = self.cell_height
         gap = 70
@@ -977,12 +800,10 @@ class VisualArea(QWidget):
                     elif phase in ['connect_bypass', 'fade_next_link', 'close']:
                         curr_y += 100
                 elif i > target_idx:
-                    if phase == 'close':
-                        curr_x -= lerp(0, step_w, progress)
+                    if phase == 'close': curr_x -= lerp(0, step_w, progress)
             bg = QColor(219, 234, 254)
             border = QColor(30, 58, 138)
-            if i == self.highlighted_index:
-                bg = QColor(250, 204, 21)
+            if i == self.highlighted_index: bg = QColor(250, 204, 21)
             if anim_type == 'linked_search' and i == state.get('current_idx'):
                 if phase == 'scanning':
                     bg = QColor(147, 197, 253)
@@ -992,22 +813,21 @@ class VisualArea(QWidget):
             if anim_type == 'linked_delete' and i == target_idx:
                 bg = QColor(254, 202, 202)
                 border = QColor(220, 38, 38)
-                if phase == 'close':
-                    painter.setOpacity(1.0 - progress)
+                if phase == 'close': painter.setOpacity(1.0 - progress)
             painter.save()
             painter.setBrush(QBrush(bg))
             painter.setPen(QPen(border, 2))
-            painter.drawRect(int(curr_x), int(curr_y), node_w, node_h)
+            painter.drawRect(self._safe_rect(curr_x, curr_y, node_w, node_h))
             painter.setPen(QPen(QColor(17, 24, 39), 1))
             painter.setFont(QFont("Arial", 11, QFont.Bold))
-            painter.drawText(int(curr_x), int(curr_y), node_w, node_h, Qt.AlignCenter, str(ll[i]))
+            painter.drawText(self._safe_rect(curr_x, curr_y, node_w, node_h), Qt.AlignCenter, str(ll[i]))
             painter.setPen(QPen(QColor(220, 38, 38)))
             painter.setFont(QFont("Arial", 8, QFont.Bold))
-            painter.drawText(int(curr_x), int(curr_y - 5), 30, 15, Qt.AlignLeft, str(i))
+            painter.drawText(self._safe_rect(curr_x, curr_y - 5, 30, 15), Qt.AlignLeft, str(i))
             if i == 0:
                 painter.setPen(QPen(Qt.black))
                 painter.setFont(QFont("Arial", 10, QFont.Bold))
-                painter.drawText(int(curr_x), int(curr_y - 25), node_w, 20, Qt.AlignCenter, "HEAD")
+                painter.drawText(self._safe_rect(curr_x, curr_y - 25, node_w, 20), Qt.AlignCenter, "HEAD")
             painter.restore()
             if i < length - 1:
                 ni = i + 1
@@ -1027,8 +847,7 @@ class VisualArea(QWidget):
                         elif phase in ['connect_bypass', 'fade_next_link', 'close']:
                             nyv += 100
                     elif ni > target_idx:
-                        if phase == 'close':
-                            nxv -= lerp(0, step_w, progress)
+                        if phase == 'close': nxv -= lerp(0, step_w, progress)
                 p1 = QPointF(curr_x + node_w, curr_y + node_h / 2)
                 p2 = QPointF(nxv, nyv + node_h / 2)
                 if anim_type == 'linked_insert' and i == target_idx - 1:
@@ -1037,13 +856,11 @@ class VisualArea(QWidget):
                         a = 1.0 - progress
                     elif phase == 'lift':
                         a = 0.0
-                    if a > 0:
-                        self.drawArrow(painter, p1.x(), p1.y(), p2.x(), p2.y(), opacity=a)
+                    if a > 0: self.drawArrow(painter, p1.x(), p1.y(), p2.x(), p2.y(), opacity=a)
                     if phase in ['link_prev', 'lift']:
                         nnx = start_x + target_idx * step_w
                         nny = base_y + 100
-                        if phase == 'lift':
-                            nny = lerp(base_y + 100, base_y, progress)
+                        if phase == 'lift': nny = lerp(base_y + 100, base_y, progress)
                         pt = QPointF(nnx, nny + node_h / 2)
                         g = progress if phase == 'link_prev' else 1.0
                         self.drawArrow(painter, p1.x(), p1.y(), pt.x(), pt.y(), color=QColor(16, 185, 129), progress=g)
@@ -1054,18 +871,15 @@ class VisualArea(QWidget):
                         a = 1.0 - progress
                     elif phase in ['drop', 'connect_bypass', 'fade_next_link', 'close']:
                         a = 0.0
-                    if a > 0:
-                        self.drawArrow(painter, p1.x(), p1.y(), p2.x(), p2.y(), opacity=a)
+                    if a > 0: self.drawArrow(painter, p1.x(), p1.y(), p2.x(), p2.y(), opacity=a)
                     if phase in ['connect_bypass', 'fade_next_link', 'close']:
                         bdi = target_idx + 1
                         if bdi < length:
                             dx = start_x + bdi * step_w
-                            if phase == 'close':
-                                dx -= lerp(0, step_w, progress)
+                            if phase == 'close': dx -= lerp(0, step_w, progress)
                             bp2 = QPointF(dx, base_y + node_h / 2)
                             g = 1.0
-                            if phase == 'connect_bypass':
-                                g = progress
+                            if phase == 'connect_bypass': g = progress
                             self.drawArrow(painter, p1.x(), p1.y(), bp2.x(), bp2.y(), color=QColor(220, 38, 38),
                                            progress=g)
                     continue
@@ -1086,16 +900,15 @@ class VisualArea(QWidget):
                 a = progress
             elif phase in ['link_next', 'link_prev', 'lift']:
                 a = 1.0
-            if phase == 'lift':
-                ny = lerp(base_y + 100, base_y, progress)
+            if phase == 'lift': ny = lerp(base_y + 100, base_y, progress)
             if a > 0:
                 painter.save()
                 painter.setOpacity(a)
                 painter.setBrush(QBrush(QColor(167, 243, 208)))
                 painter.setPen(QPen(QColor(5, 150, 105), 2))
-                painter.drawRect(int(nx), int(ny), node_w, node_h)
+                painter.drawRect(self._safe_rect(nx, ny, node_w, node_h))
                 painter.setPen(Qt.black)
-                painter.drawText(int(nx), int(ny), node_w, node_h, Qt.AlignCenter, str(new_val))
+                painter.drawText(self._safe_rect(nx, ny, node_w, node_h), Qt.AlignCenter, str(new_val))
                 painter.restore()
                 if phase in ['link_next', 'link_prev', 'lift'] and target_idx < length:
                     nnx = start_x + (target_idx + 1) * step_w
@@ -1110,71 +923,60 @@ class VisualArea(QWidget):
         painter.setPen(QPen(QColor(156, 163, 175), 2))
 
         for idx, pos_data in self.node_positions.items():
-            if idx < 0 or idx >= len(struct_array):
-                continue
+            if idx < 0 or idx >= len(struct_array): continue
             node = struct_array[idx]
             current_pos = self._get_safe_pos(idx)
-            if not current_pos:
-                continue
+            if not current_pos: continue
             cx, cy = current_pos
 
             if node.left != -1:
                 l_pos = self._get_safe_pos(node.left)
                 if l_pos:
                     lx, ly = l_pos
-                    painter.drawLine(cx, cy, lx, ly)
+                    painter.drawLine(self._safe_point(cx, cy), self._safe_point(lx, ly))
 
             if node.right != -1:
                 r_pos = self._get_safe_pos(node.right)
                 if r_pos:
                     rx, ry = r_pos
-                    painter.drawLine(cx, cy, rx, ry)
+                    painter.drawLine(self._safe_point(cx, cy), self._safe_point(rx, ry))
         painter.restore()
 
         for idx in self.node_positions.keys():
-            if idx < 0 or idx >= len(struct_array):
-                continue
+            if idx < 0 or idx >= len(struct_array): continue
             node = struct_array[idx]
             pos = self._get_safe_pos(idx)
-            if pos:
-                self._draw_single_huffman_struct_node(painter, node, pos[0], pos[1])
-
+            if pos: self._draw_single_huffman_struct_node(painter, node, pos[0], pos[1])
 
     def _draw_single_huffman_struct_node(self, painter, node, x, y):
         radius = self.node_radius
         painter.save()
-
         if node.left == -1 and node.right == -1:
             bg_color = QColor(167, 243, 208)
         else:
             bg_color = QColor(254, 215, 170)
-
         anim_targets = self.anim_state.get('targets', {})
         active_parent_idx = self.anim_state.get('active_parent_idx', -1)
-
-        if (node.index in anim_targets) or (node.index == active_parent_idx):
-            bg_color = QColor(250, 204, 21)
-
+        if (node.index in anim_targets) or (node.index == active_parent_idx): bg_color = QColor(250, 204, 21)
         painter.setBrush(QBrush(bg_color))
         painter.setPen(QPen(QColor(31, 41, 55), 2))
-        painter.drawEllipse(QPoint(int(x), int(y)), radius, radius)
+
+        center = self._safe_point(x, y)
+        painter.drawEllipse(center, radius, radius)
 
         painter.setPen(QPen(QColor(0, 0, 0), 1))
         painter.setFont(QFont("Arial", 8, QFont.Bold))
-
         if node.data:
             disp = f"{node.data}\n{node.weight}"
         else:
             disp = f"{node.weight}"
 
-        text_rect = QRectF(x - radius, y - radius, radius * 2, radius * 2)
+        text_rect = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
         painter.drawText(text_rect, Qt.AlignCenter, disp)
-
         painter.restore()
 
     def drawArrow(self, painter, start_x, start_y, end_x, end_y, color=QColor(59, 130, 246), opacity=1.0, progress=1.0):
-        if progress <= 0.01 or opacity <= 0.01:
-            return
+        if progress <= 0.01 or opacity <= 0.01: return
         painter.save()
         painter.setOpacity(opacity)
         pen = QPen(color, 2)
@@ -1182,17 +984,73 @@ class VisualArea(QWidget):
         painter.setBrush(QBrush(color))
         dx = start_x + (end_x - start_x) * progress
         dy = start_y + (end_y - start_y) * progress
-        painter.drawLine(int(start_x), int(start_y), int(dx), int(dy))
+
+        p1 = self._safe_point(start_x, start_y)
+        p2 = self._safe_point(dx, dy)
+        painter.drawLine(p1, p2)
+
         if progress > 0.8:
             ang = math.atan2(end_y - start_y, end_x - start_x) * 180 / math.pi
             sz = 10
-            p1 = QPointF(dx - sz * math.cos(math.radians(ang + 30)), dy - sz * math.sin(math.radians(ang + 30)))
-            p2 = QPointF(dx - sz * math.cos(math.radians(ang - 30)), dy - sz * math.sin(math.radians(ang - 30)))
+            # 安全转换点
+            ax = dx - sz * math.cos(math.radians(ang + 30))
+            ay = dy - sz * math.sin(math.radians(ang + 30))
+            bx = dx - sz * math.cos(math.radians(ang - 30))
+            by = dy - sz * math.sin(math.radians(ang - 30))
+
             head = QPolygonF()
-            head.append(QPointF(dx, dy))
-            head.append(p1)
-            head.append(p2)
+            head.append(QPointF(float(dx), float(dy)))
+            head.append(QPointF(float(ax), float(ay)))
+            head.append(QPointF(float(bx), float(by)))
             painter.drawPolygon(head)
+        painter.restore()
+
+    def _draw_bst_overlay(self, painter):
+        state = self.anim_state
+        target_val = state.get('target_val')
+        curr_node = state.get('current_node')
+        next_node = state.get('next_node')
+        progress = state.get('progress', 0.0)
+        status = state.get('status')
+
+        sx, sy = 0, 0
+        if not curr_node:
+            if status == 'insert_found' and getattr(self.data_structure, 'root', None) is None:
+                sx, sy = self.width() // 2, 50
+            else:
+                return
+        else:
+            pos = self.current_frame_node_pos.get(curr_node)
+            if not pos: return
+            sx, sy = pos
+
+        draw_x, draw_y = sx, sy
+
+        if status == 'move' and next_node:
+            end_pos = self.current_frame_node_pos.get(next_node)
+            if end_pos:
+                ex, ey = end_pos
+                draw_x = lerp(sx, ex, progress)
+                draw_y = lerp(sy, ey, progress)
+        elif status == 'insert_found':
+            draw_y += 40
+
+        painter.save()
+        bg_color = QColor(59, 130, 246)
+        if status == 'found':
+            bg_color = QColor(34, 197, 94)
+        elif status == 'not_found':
+            bg_color = QColor(239, 68, 68)
+
+        center = self._safe_point(draw_x, draw_y)
+        painter.translate(center)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(bg_color.red(), bg_color.green(), bg_color.blue(), 150))
+        painter.drawEllipse(QPoint(0, 0), 18, 18)
+
+        painter.setPen(Qt.white)
+        painter.setFont(QFont("Arial", 10, QFont.Bold))
+        painter.drawText(QRectF(-18, -18, 36, 36), Qt.AlignCenter, str(target_val))
         painter.restore()
 
 
@@ -1246,22 +1104,29 @@ class BaseVisualizer(QWidget):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
         self.setLayout(root_layout)
+
+        # === 侧边栏配置 ===
         sidebar = QWidget()
-        sidebar.setFixedWidth(420)
+        # [修改点1] 减小宽度，适应小屏幕
+        sidebar.setFixedWidth(320)
         sidebar.setStyleSheet("background-color: #f3f4f6; border-right: 1px solid #e5e7eb;")
+
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(20, 30, 20, 30)
-        sidebar_layout.setSpacing(20)
+        # [修改点2] 减小边距和间距，防止高度溢出
+        sidebar_layout.setContentsMargins(10, 15, 10, 15)
+        sidebar_layout.setSpacing(10)
+
         title_label = QLabel(self.title)
         title_label.setStyleSheet(
-            "font-family: 'Microsoft YaHei'; font-size: 22px; font-weight: bold; color: #111827; margin-bottom: 10px;")
+            "font-family: 'Microsoft YaHei'; font-size: 20px; font-weight: bold; color: #111827; margin-bottom: 5px;")
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setWordWrap(True)
         sidebar_layout.addWidget(title_label)
 
         # === 核心操作区域 (使用 QScrollArea) ===
         control_group = QGroupBox("核心操作")
-        control_group.setMinimumHeight(200)
+        # [修改点3] 适当减小最小高度限制
+        control_group.setMinimumHeight(180)
         control_group.setStyleSheet(STYLES["group_box"])
 
         scroll = QScrollArea()
@@ -1272,8 +1137,8 @@ class BaseVisualizer(QWidget):
         scroll_content.setStyleSheet("background-color: transparent;")
 
         scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setSpacing(10)
-        scroll_layout.setContentsMargins(5, 5, 5, 5)
+        scroll_layout.setSpacing(8)
+        scroll_layout.setContentsMargins(2, 2, 2, 2)
 
         scroll_layout.addLayout(self._create_input_layout())
         scroll_layout.addLayout(self._create_button_layout())
@@ -1286,14 +1151,16 @@ class BaseVisualizer(QWidget):
         group_layout.addWidget(scroll)
         control_group.setLayout(group_layout)
 
+        # 核心操作区也是主要区域，给予拉伸权重 1
         sidebar_layout.addWidget(control_group, 1)
         # ==========================================
 
+        # === 文件管理 ===
         file_group = QGroupBox("文件管理")
         file_group.setStyleSheet(STYLES["group_box"])
         file_layout = QVBoxLayout()
-        file_layout.setContentsMargins(15, 20, 15, 15)
-        file_layout.setSpacing(12)
+        file_layout.setContentsMargins(10, 15, 10, 10)
+        file_layout.setSpacing(8)
         btn_io_layout = QHBoxLayout()
         self.save_btn = QPushButton("保存结构")
         self.save_btn.setStyleSheet(STYLES["btn_success"])
@@ -1307,33 +1174,44 @@ class BaseVisualizer(QWidget):
         file_group.setLayout(file_layout)
         sidebar_layout.addWidget(file_group, 0)
 
+        # === 最近保存 (ScrollArea) ===
         recent_group = QGroupBox("最近保存")
         recent_group.setStyleSheet(STYLES["group_box"])
         recent_group_layout = QVBoxLayout()
-        recent_group_layout.setContentsMargins(1, 20, 1, 1)
+        recent_group_layout.setContentsMargins(1, 15, 1, 1)
+
         self.recent_list_widget = QWidget()
         self.recent_list_widget.setStyleSheet("background-color: white;")
         self.recent_list_layout = QVBoxLayout(self.recent_list_widget)
-        self.recent_list_layout.setSpacing(6)
-        self.recent_list_layout.setContentsMargins(10, 5, 10, 5)
+        self.recent_list_layout.setSpacing(4)
+        self.recent_list_layout.setContentsMargins(5, 5, 5, 5)
         self.recent_list_layout.setAlignment(Qt.AlignTop)
+
         scroll_recent = QScrollArea()
         scroll_recent.setWidgetResizable(True)
         scroll_recent.setWidget(self.recent_list_widget)
-        scroll_recent.setMinimumHeight(130)
+        # 稍微减小高度
+        scroll_recent.setMinimumHeight(100)
         scroll_recent.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+
         recent_group_layout.addWidget(scroll_recent)
         recent_group.setLayout(recent_group_layout)
+
+        # 给最近保存列表也一点拉伸权重，但比核心操作小
         sidebar_layout.addWidget(recent_group, 1)
 
+        # === DSL 脚本控制区 ===
         dsl_group = QGroupBox("DSL脚本控制区")
         dsl_group.setStyleSheet(STYLES["group_box"])
         dsl_layout = QVBoxLayout(dsl_group)
+        # 减小边距
+        dsl_layout.setContentsMargins(10, 15, 10, 10)
 
         self.dsl_input = QTextEdit()
         self.dsl_input.setPlaceholderText("在此输入指令，例如：\nBUILD: 10, 20, 30\nINSERT: 40\nDELETE: 10")
         self.dsl_input.setStyleSheet("border: 1px solid #d1d5db; border-radius: 6px; background-color: #f9fafb;")
-        self.dsl_input.setMaximumHeight(100)
+        # [修改点4] 限制高度，节省空间
+        self.dsl_input.setMaximumHeight(80)
 
         run_btn = QPushButton("执行脚本")
         run_btn.setStyleSheet(STYLES["btn_primary"])
@@ -1345,20 +1223,21 @@ class BaseVisualizer(QWidget):
 
         sidebar_layout.addWidget(dsl_group, 0)
 
+        # === 设置区域 ===
         settings_group = QGroupBox("设置")
         settings_group.setStyleSheet(STYLES["group_box"])
         settings_layout = QVBoxLayout()
-        settings_layout.setContentsMargins(15, 20, 15, 15)
-        settings_layout.setSpacing(12)
+        settings_layout.setContentsMargins(10, 15, 10, 10)
+        settings_layout.setSpacing(8)
 
-        # --- 新增 CheckBox ---
+        # 动画开关
         self.anim_checkbox = QCheckBox("启用动画效果")
         self.anim_checkbox.setChecked(self.anim_enabled)
         self.anim_checkbox.stateChanged.connect(self._toggle_animation)
         self.anim_checkbox.setStyleSheet("font-family: 'Microsoft YaHei'; color: #4b5563; padding-left: 0;")
         settings_layout.addWidget(self.anim_checkbox)
-        # ---------------------
 
+        # 速度控制
         speed_layout = QHBoxLayout()
         speed_lbl = QLabel("动画速度(ms):")
         speed_lbl.setStyleSheet("font-family: 'Microsoft YaHei'; color: #4b5563;")
@@ -1369,6 +1248,7 @@ class BaseVisualizer(QWidget):
         speed_layout.addWidget(self.speed_slider)
         settings_layout.addLayout(speed_layout)
 
+        # 返回按钮
         ret_layout = QHBoxLayout()
         self.button_return = QPushButton("返回上一级")
         self.button_return.clicked.connect(self.on_button_return_clicked)
@@ -1378,20 +1258,25 @@ class BaseVisualizer(QWidget):
             btn.setStyleSheet(STYLES["btn_secondary"])
             ret_layout.addWidget(btn)
         settings_layout.addLayout(ret_layout)
+
         settings_group.setLayout(settings_layout)
         sidebar_layout.addWidget(settings_group, 0)
 
-        sidebar_layout.addStretch()
+        # 移除底部的 addStretch，让上面的 addWidget(..., 1) 自动分配空间
+        # sidebar_layout.addStretch()
+
+        # === 右侧可视化内容区域 ===
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(30, 30, 30, 30)
-        content_layout.setSpacing(20)
+        # 减小外边距
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        content_layout.setSpacing(15)
 
         visual_box = QGroupBox("可视化演示")
         visual_box.setStyleSheet(
             "QGroupBox { background-color: white; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; font-weight: bold; color: #1f2937; } QGroupBox::title { subcontrol-origin: margin; left: 15px; padding: 0 5px; top: 10px; }")
         vb_layout = QVBoxLayout()
-        vb_layout.setContentsMargins(5, 35, 5, 5)
+        vb_layout.setContentsMargins(5, 30, 5, 5)
         self.visual_area = VisualArea(self)
         vb_layout.addWidget(self.visual_area)
         visual_box.setLayout(vb_layout)
@@ -1399,7 +1284,7 @@ class BaseVisualizer(QWidget):
 
         self.status_label = QLabel("就绪")
         self.status_label.setStyleSheet(
-            "background: #eff6ff; color: #1e40af; padding: 12px; border-radius: 6px; border: 1px solid #bfdbfe; font-family: 'Microsoft YaHei'; font-weight: bold;")
+            "background: #eff6ff; color: #1e40af; padding: 10px; border-radius: 6px; border: 1px solid #bfdbfe; font-family: 'Microsoft YaHei'; font-weight: bold;")
         self.status_label.setAlignment(Qt.AlignCenter)
         content_layout.addWidget(self.status_label)
 
@@ -3425,139 +3310,235 @@ class BinarySearchTreeVisualizer(BaseVisualizer):
 class AVLTreeVisualizer(BinarySearchTreeVisualizer):
     def __init__(self, main_window=None, last_window=None):
         super().__init__(main_window, last_window)
-        self.title = "AVL树 (动画版)"
+        self.title = "AVL树 (全自动平衡演示版)"
         self.setWindowTitle(self.title)
 
         # 初始化 AVL 树
         self.data_structure = AVLTree()
         self.visual_area.set_data_structure(self.data_structure)
-        self.last_inserted_node = None
 
-        # 预设演示数据 (自动平衡)
-        # 注意：这里我们手动插入一些数据来展示初始效果
-        for v in [10, 20, 30, 40, 50, 25]:
+        # 核心变量：平衡检查的起点
+        self.balance_check_start_node = None
+
+        # 预设演示数据 (生成题目描述中的树: 根30, 左20(10,25), 右50(40))
+        for v in [30, 20, 50, 10, 25, 40]:
             self.data_structure.insert(v, auto_balance=True)
 
+        self._sync_root()
         self.update_display()
-        self.status_label.setText("AVL树已就绪 - 插入空树将直接创建根节点")
+        self.status_label.setText("AVL树已就绪 - 尝试删除节点40或50观察动画")
+
+    def _sync_root(self):
+        """确保根节点引用正确"""
+        if self.data_structure.root and self.data_structure.root.parent:
+            curr = self.data_structure.root
+            while curr.parent: curr = curr.parent
+            self.data_structure.root = curr
+
+    def _connect_timer(self, callback):
+        """辅助函数：安全连接定时器"""
+        try:
+            self.anim_timer.timeout.disconnect()
+        except:
+            pass
+        self.anim_timer.timeout.connect(callback)
+        self.anim_timer.setInterval(30)
+        self.anim_timer.start()
 
     def start_insert(self):
-        """重写插入：包含空树检查 + BST动画 + 平衡动画"""
+        """插入入口"""
         if self.is_animating: return
         val = self._get_value()
         if val is None: return
         self.value_input.clear()
 
-        # [关键修复] 如果是空树，直接插入根节点，不播放查找动画 (防止崩溃)
-        if self.data_structure.is_empty():
+        # 空树或无动画直接处理
+        if self.data_structure.is_empty() or not self.anim_enabled:
             self.data_structure.insert(val, auto_balance=True)
-            self.update_display()
-            self.status_label.setText(f"已创建根节点: {val}")
-            return
-
-        # 如果未启用动画，直接插入
-        if not self.anim_enabled:
-            self.data_structure.insert(val, auto_balance=True)
+            self._sync_root()
             self.update_display()
             self.status_label.setText(f"已插入: {val}")
             return
 
-        # 树不为空，启动 BST 查找动画
+        # 1. 启动查找动画
         self.is_animating = True
         self.visual_area.anim_state = {
-            'type': 'bst_insert',
-            'target_val': val,
-            'current_node': self.data_structure.root,
-            'next_node': None,
-            'status': 'appear',
-            'progress': 0.0,
-            'path_history': []
+            'type': 'bst_insert', 'target_val': val,
+            'current_node': self.data_structure.root, 'next_node': None,
+            'status': 'appear', 'progress': 0.0, 'path_history': []
         }
-
-        # 断开旧连接，连接到 AVL 专用的动画更新函数
-        try:
-            self.anim_timer.timeout.disconnect()
-        except:
-            pass
-        self.anim_timer.timeout.connect(self.update_insert_animation)
-        self.anim_timer.setInterval(30)
-        self.anim_timer.start()
+        self._connect_timer(self.update_insert_animation)
         self.status_label.setText(f"查找插入位置: {val}...")
 
-    def update_insert_animation(self):
-        """处理插入动画阶段"""
-        state = self.visual_area.anim_state
+    def start_delete(self):
+        """删除入口"""
+        if self.is_animating: return
+        val = self._get_value()
+        if val is None: return
+        self.value_input.clear()
+        if self.data_structure.is_empty(): return
 
-        # 检查是否完成了查找阶段
+        # 无动画直接处理
+        if not self.anim_enabled:
+            self.data_structure.delete(val, auto_balance=True)
+            self._sync_root()
+            self.update_display()
+            self.status_label.setText(f"已删除: {val}")
+            return
+
+        # 1. 启动查找动画
+        self.is_animating = True
+        self.status_label.setText(f"查找删除目标: {val}...")
+        self.visual_area.anim_state = {
+            'type': 'bst_delete', 'target_val': val,
+            'current_node': self.data_structure.root, 'next_node': None,
+            'status': 'appear', 'progress': 0.0, 'path_history': []
+        }
+        self._connect_timer(self.update_delete_animation)
+
+    def update_insert_animation(self):
+        """插入动画逻辑"""
+        state = self.visual_area.anim_state
         if state.get('type') == 'bst_insert' and state.get('status') in ['insert_found', 'found'] and state.get(
                 'progress') >= 1.0:
             self.anim_timer.stop()
             val = state['target_val']
 
             if state['status'] == 'found':
-                self.status_label.setText(f"元素 {val} 已存在")
-                self.is_animating = False
-                self.visual_area.anim_state = {}
-                self.update_display()
+                self.finish_operation("元素已存在")
                 return
 
-            # 2. 物理插入 (参数 auto_balance=False，因为我们要手动演示旋转)
+            # [步骤1] 记住当前树（虽然插入是新挂节点，但为了统一逻辑）
+            start_positions = self.visual_area.calculate_all_node_positions()
+
+            # [步骤2] 物理插入 (auto_balance=False)
             new_node = self.data_structure.insert(val, auto_balance=False)
-            self.last_inserted_node = new_node
+            self.balance_check_start_node = new_node  # 记录检查点
+            self._sync_root()
 
-            self.visual_area.anim_state = {}
-            self.update_display()
+            # [步骤3] 计算新树布局
+            end_positions = self.visual_area.calculate_all_node_positions()
 
-            # 3. 启动平衡检查
-            self.status_label.setText(f"节点 {val} 已插入，检查平衡...")
-            QTimer.singleShot(300, self.check_balance_step)
+            # [步骤4] 启动 Morph 动画 (平滑展示新节点出现)
+            # 虽然插入通常是直接出现，但如果导致了挤压，morph 会更自然
+            self.visual_area.anim_state = {
+                'type': 'morph',
+                'start_positions': start_positions,
+                'end_positions': end_positions,
+                'pivot': None,
+                'new_root': None,
+                'progress': 0.0,
+                'next_action': 'check_balance'  # 动画结束后，去检查平衡
+            }
+            self.status_label.setText(f"节点插入完成，准备检查平衡...")
+            self._connect_timer(self.update_morph_animation)
+            return
+        super().update_animation()
+
+    import traceback  # 引入这个库以便打印详细错误堆栈
+
+    def update_delete_animation(self):
+        """删除动画逻辑（全包裹安全版）"""
+        state = self.visual_area.anim_state
+
+        # 目标状态列表，确保包含 delete_found
+        target_statuses = ['found', 'delete_found', 'not_found']
+
+        if state.get('type') == 'bst_delete' and state.get('status') in target_statuses and state.get(
+                'progress') >= 1.0:
+
+            self.anim_timer.stop()
+
+            # --- 【安全网开始】将所有逻辑包裹起来 ---
+            try:
+                val = state['target_val']
+                print(f"DEBUG: 开始处理删除逻辑，目标值: {val}")
+
+                if state['status'] == 'not_found':
+                    self.finish_operation("元素不存在，无法删除")
+                    return
+
+                # [步骤1] 记录删除前位置
+                start_positions = self.visual_area.calculate_all_node_positions()
+
+                # [步骤2] 物理删除 (auto_balance=False)
+                # 注意：这里我们信任 delete 方法已经修改为返回 Node 了
+                balance_start_node = self.data_structure.delete(val, auto_balance=False)
+
+                print(f"DEBUG: 物理删除完成，返回平衡点: {balance_start_node}")
+
+                # [步骤3] 同步根节点与记录检查点
+                # 这一步之前可能在 try 外面，导致如果 root 没了就崩溃
+                self.balance_check_start_node = balance_start_node
+                self._sync_root()
+
+                # [步骤4] 计算新树布局
+                # 如果树空了，这里必须能处理空树的情况
+                end_positions = self.visual_area.calculate_all_node_positions()
+
+                # [步骤5] 启动 Morph 动画
+                # 判断树是否为空
+                is_tree_empty = self.data_structure.root is None
+
+                self.visual_area.anim_state = {
+                    'type': 'morph',
+                    'start_positions': start_positions,
+                    'end_positions': end_positions,
+                    'pivot': None,
+                    'new_root': None,
+                    'progress': 0.0,
+                    # 如果树空了，直接 finish；否则检查平衡
+                    'next_action': 'finish' if is_tree_empty else 'check_balance'
+                }
+
+                print("DEBUG: 启动 Morph 动画")
+                self.status_label.setText(f"节点删除完成，正在调整树结构...")
+                self._connect_timer(self.update_morph_animation)
+
+            except Exception as e:
+                # --- 【安全网捕获】 ---
+                print("\n!!! 严重错误: 动画逻辑发生异常 !!!")
+                print(f"错误信息: {e}")
+                print("错误堆栈:")
+                traceback.print_exc()  # 这行代码会打印出具体哪一行崩溃了
+
+                # 尝试恢复状态，避免界面卡死
+                self.finish_operation("发生内部错误")
+
             return
 
-        # 如果还在查找路径中，复用父类的逻辑
+        # 没满足条件时，继续之前的查找动画
         super().update_animation()
 
     def check_balance_step(self):
-        """检查树是否平衡"""
-        if not self.last_inserted_node:
-            self.finish_operation()
-            return
+        """平衡检查循环：这是在每一次结构调整（删除/插入）动画完成后调用的"""
+        self._sync_root()
 
-        # 从最后插入/变动的节点向上查找最近的不平衡点
-        unbalanced = self.data_structure.get_lowest_unbalanced_node(self.last_inserted_node)
+        # 查找最深的不平衡节点
+        unbalanced = self.data_structure.get_lowest_unbalanced_node(self.balance_check_start_node)
 
         if not unbalanced:
-            self.finish_operation()
-            self.status_label.setText("树已平衡")
+            self.finish_operation("平衡检查完成，结构稳定")
             return
 
-        # 发现不平衡，准备旋转动画
+        # 发现不平衡，准备旋转
+        # 此时，树是“歪”的，我们准备把它“转正”
         self.prepare_rotation_animation(unbalanced)
 
-    def finish_operation(self):
-        """结束操作，清理状态"""
-        self.is_animating = False
-        self.visual_area.anim_state = {}
-        # 恢复默认 timer 连接 (防止影响其他页面)
-        try:
-            self.anim_timer.timeout.disconnect()
-            self.anim_timer.timeout.connect(self.update_animation)
-        except:
-            pass
-        self.update_display()
-
     def prepare_rotation_animation(self, node):
-        """准备 Morph 动画"""
+        """准备旋转动画：同样遵循 记忆->旋转->形态变化 的流程"""
         balance = self.data_structure._get_balance(node)
         desc = ""
 
-        # 1. 记录旋转前坐标
+        # [步骤 1] 记住旋转前的样子 (Snapshot A)
         start_positions = self.visual_area.calculate_all_node_positions()
 
-        # 2. 执行旋转 (改变数据结构)
+        # [步骤 2] 后台执行物理旋转
+        # 这一步执行后，数据结构的父子关系瞬间改变
         pivot = node
         new_root = None
 
-        if balance > 1:
+        if balance > 1:  # 左偏
             if self.data_structure._get_balance(node.left_child) >= 0:
                 desc = "右旋 (LL)"
                 new_root = self.data_structure.rotate_right(node)
@@ -3565,7 +3546,7 @@ class AVLTreeVisualizer(BinarySearchTreeVisualizer):
                 desc = "先左后右 (LR)"
                 self.data_structure.rotate_left(node.left_child)
                 new_root = self.data_structure.rotate_right(node)
-        else:
+        else:  # 右偏
             if self.data_structure._get_balance(node.right_child) <= 0:
                 desc = "左旋 (RR)"
                 new_root = self.data_structure.rotate_left(node)
@@ -3574,53 +3555,200 @@ class AVLTreeVisualizer(BinarySearchTreeVisualizer):
                 self.data_structure.rotate_right(node.right_child)
                 new_root = self.data_structure.rotate_left(node)
 
-        # 3. 记录旋转后坐标
+        self._sync_root()
+
+        # [步骤 3] 计算旋转后的样子 (Snapshot B)
+        # 此时新的父节点已经到了上面
         end_positions = self.visual_area.calculate_all_node_positions()
 
-        # 4. 配置动画状态
+        # [步骤 4] 启动 Morph 动画
+        # 播放旋转过程，并在结束后**再次**调用 check_balance，形成循环
         self.visual_area.anim_state = {
             'type': 'morph',
             'start_positions': start_positions,
             'end_positions': end_positions,
             'pivot': pivot,
             'new_root': new_root,
-            'progress': 0.0
+            'progress': 0.0,
+            'next_action': 'check_balance'
         }
 
-        self.status_label.setText(f"检测到不平衡! 执行 {desc}...")
+        self.status_label.setText(f"检测到不平衡 (BF={balance})，正在执行 {desc}...")
+        self._connect_timer(self.update_morph_animation)
 
+    def update_morph_animation(self):
+        """处理节点移动、消失的插值动画"""
+        state = self.visual_area.anim_state
+
+        # 增加进度
+        state['progress'] += 0.05  # 调节速度：越小越慢
+
+        if state['progress'] >= 1.0:
+            self.anim_timer.stop()
+            state['progress'] = 1.0
+
+            # 动画结束，决定下一步去哪
+            next_action = state.get('next_action')
+
+            if next_action == 'check_balance':
+                # 去执行平衡检查（对应 AVL/红黑树逻辑）
+                # 确保你 connect 到了正确的检查函数
+                self.start_balance_check_animation()
+            elif next_action == 'finish':
+                self.finish_operation("操作完成")
+
+            # 刷新一下以显示最终准确位置
+            self.visual_area.update()
+            return
+
+        # 触发重绘，paintEvent 会根据 progress 计算位置
+        self.visual_area.update()
+
+    # --- 配合 PaintEvent 使用的辅助函数 ---
+
+    def draw_morph_frame(self, painter, state):
+        """
+        根据 progress，在 start_positions 和 end_positions 之间插值画图
+        """
+        t = state['progress']
+        start_pos = state['start_positions']
+        end_pos = state['end_positions']
+
+        # 获取所有涉及的节点（包括即将消失的）
+        all_nodes = set(start_pos.keys()) | set(end_pos.keys())
+
+        for node in all_nodes:
+            # 计算插值坐标
+            p_start = start_pos.get(node)
+            p_end = end_pos.get(node)
+
+            current_x, current_y = 0, 0
+
+            if p_start and p_end:
+                # 移动：从 A 到 B
+                current_x = p_start[0] + (p_end[0] - p_start[0]) * t
+                current_y = p_start[1] + (p_end[1] - p_start[1]) * t
+                opacity = 1.0
+            elif p_start and not p_end:
+                # 消失：节点被删除了
+                current_x, current_y = p_start
+                # 让他慢慢变透明，或者慢慢缩小
+                opacity = 1.0 - t
+            elif not p_start and p_end:
+                # 出现：新插入的节点（删除逻辑里一般没有这个，除非有替补节点飞过来）
+                current_x, current_y = p_end
+                opacity = t
+
+            # 拿到坐标后，画出这个节点
+            # 注意：你需要设置 painter 的透明度来配合 opacity
+            painter.setOpacity(opacity)
+            self.draw_node(painter, node, current_x, current_y)
+            painter.setOpacity(1.0)  # 还原
+
+    def finish_operation(self, msg=""):
+        self.is_animating = False
+        self.visual_area.anim_state = {}
+        if msg: self.status_label.setText(msg)
         try:
             self.anim_timer.timeout.disconnect()
         except:
             pass
-        self.anim_timer.timeout.connect(self.update_morph_animation)
-        self.anim_timer.setInterval(20)  # 50fps
-        self.anim_timer.start()
+        self.anim_timer.timeout.connect(self.update_animation)
+        self.anim_timer.stop()
+        self.update_display()
 
-    def update_morph_animation(self):
-        """执行节点飞行位移动画"""
+    def start_balance_check_animation(self):
+        """
+        [缺失的函数] 启动平衡检查动画
+        从删除/插入的受影响节点开始，一路向上检查 BF 值
+        """
+        node = self.balance_check_start_node
+
+        # 情况处理：如果节点为空（比如删除了根节点导致树空），直接结束
+        if node is None:
+            # 尝试获取根节点，如果连根都没了，说明树空了
+            if self.data_structure.root:
+                node = self.data_structure.root
+            else:
+                self.finish_operation("树已清空，操作结束")
+                return
+
+        # 初始化动画状态
+        self.visual_area.anim_state = {
+            'type': 'balance_check',  # 状态类型
+            'current_node': node,  # 当前检查的节点
+            'status': 'checking',
+            'progress': 0.0
+        }
+
+        self.status_label.setText(f"Morph 完成，开始从节点 {node.data} 向上检查平衡...")
+        self._connect_timer(self.update_balance_check_animation)
+
+    def update_balance_check_animation(self):
+        """
+        [已修复] 平衡检查的帧循环逻辑 (Timer 调用)
+        """
         state = self.visual_area.anim_state
-        state['progress'] += 0.03  # 动画速度
+        node = state.get('current_node')
 
-        if state['progress'] >= 1.0:
-            self.anim_timer.stop()
-            self.visual_area.anim_state = {}
-            self.update_display()
-
-            # 旋转完成后，更新 last_inserted_node 为新子树根，继续向上检查是否还有不平衡
-            self.last_inserted_node = state['new_root']
-            QTimer.singleShot(200, self.check_balance_step)
+        # 1. 安全检查
+        if not node:
+            self.finish_operation("平衡检查完成")
             return
 
-        self.visual_area.update()
+        # 2. 计算平衡因子 (BF)
+        try:
+            # 优先尝试调用 model.py 中的私有方法 _get_balance
+            if hasattr(self.data_structure, '_get_balance'):
+                bf = self.data_structure._get_balance(node)
+            elif hasattr(self.data_structure, 'get_balance'):
+                bf = self.data_structure.get_balance(node)
+            else:
+                # 手动计算 fallback
+                l_h = node.left_child.height if node.left_child else 0
+                r_h = node.right_child.height if node.right_child else 0
+                bf = l_h - r_h
+        except Exception:
+            bf = 0
+
+        # 3. 更新界面文字
+        self.status_label.setText(f"正在检查节点 {node.data} (BF = {bf})...")
+        self.visual_area.highlighted_node = node  # 高亮当前节点
+        self.visual_area.update()  # 强制重绘
+
+        # 4. 判断是否失衡 (|BF| > 1)
+        if abs(bf) > 1:
+            self.anim_timer.stop()
+            self.status_label.setText(f"发现失衡节点 {node.data} (BF={bf})，准备旋转修复...")
+
+            # --- [修复点 A] 方法名修正：改为调用 prepare_rotation_animation ---
+            if hasattr(self, 'prepare_rotation_animation'):
+                self.prepare_rotation_animation(node)
+            else:
+                # --- [修复点 B] 保底逻辑修正：调用存在的 rebalance_all ---
+                print("DEBUG: 未找到 prepare_rotation_animation，执行瞬间平衡")
+                self.data_structure.rebalance_all()
+                self.visual_area.node_positions = self.visual_area.calculate_all_node_positions()
+                self.finish_operation("平衡完成 (无旋转动画)")
+            return
+
+        # 5. 如果当前节点平衡，继续向上检查父节点
+        if node.parent:
+            state['current_node'] = node.parent
+        else:
+            # 已经到了根节点，且根节点也平衡
+            self.visual_area.highlighted_node = None
+            self.finish_operation("平衡检查完成，树结构稳定")
 
     def random_build(self):
         self.data_structure.clear()
         vals = random.sample(range(1, 100), 8)
         for v in vals:
             self.data_structure.insert(v, auto_balance=True)
+        self._sync_root()
         self.update_display()
         self.status_label.setText("已随机生成 AVL 树")
+
 
 def main():
     app = QApplication(sys.argv)

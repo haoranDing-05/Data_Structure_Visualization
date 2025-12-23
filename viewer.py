@@ -12,13 +12,26 @@ from visualization import StackVisualizer, SequenceListVisualizer, LinkedListVis
 from qianwen_api import QianWenAPI, AIAssistantThread
 
 
+def adjust_window_to_screen(window, width_ratio=0.6, height_ratio=0.8):
+    """根据屏幕大小自动调整窗口尺寸并居中"""
+    screen = QApplication.primaryScreen().availableGeometry()
+    target_width = int(screen.width() * width_ratio)
+    target_height = int(screen.height() * height_ratio)
+
+    # 居中计算
+    x = (screen.width() - target_width) // 2
+    y = (screen.height() - target_height) // 2
+
+    window.setGeometry(x, y, target_width, target_height)
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.init_sound_effects()
         #是否添加背景音乐？
         self.setWindowTitle("数据结构课设——数据结构可视化")
-        self.setGeometry(100, 100, 640, 852)
+
+        adjust_window_to_screen(self, 0.5, 0.8) # 宽度占屏幕50%，高度占80%
 
         central_frame = QFrame()
         self.setCentralWidget(central_frame)
@@ -421,7 +434,7 @@ class LinearStructureWindow(QMainWindow):
         self.mainwindow = mainwindow
         self.init_sound_effects()
         self.setWindowTitle("线性结构可视化")
-        self.setGeometry(100, 100, 640, 852)
+        adjust_window_to_screen(self, 0.5, 0.8) # 宽度占屏幕50%，高度占80%
         central_frame = QFrame()
         self.setCentralWidget(central_frame)
         self.set_background_image(central_frame, "./DataStructureVisualization/微信图片_20250922183759_13_117.jpg")
@@ -582,7 +595,7 @@ class TreeStructureWindow(QMainWindow):
         self.mainwindow = mainwindow
         self.init_sound_effects()
         self.setWindowTitle("树形结构可视化")
-        self.setGeometry(100, 100, 640, 852)
+        adjust_window_to_screen(self, 0.5, 0.8)
         central_frame = QFrame()
         self.setCentralWidget(central_frame)
         self.set_background_image(central_frame, "./DataStructureVisualization/微信图片_20250922183759_13_117.jpg")
@@ -784,6 +797,10 @@ class TreeStructureWindow(QMainWindow):
 
 
 if __name__ == "__main__":
+    # --- 新增：启用高分屏缩放支持 ---
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+    # -----------------------------
     app = QApplication(sys.argv)
     window = MainWindow()
     #ai_window = AI_Floating_Window()
