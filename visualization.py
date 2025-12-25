@@ -1059,13 +1059,20 @@ class BaseVisualizer(QWidget):
 
     def __init__(self, main_window=None, last_window=None, title="数据结构可视化工具"):
         super().__init__()
+        # --- 调试标记：启动时请留意控制台输出 ---
+        print(f"[{title}] 正在初始化 BaseVisualizer (已修复 AI 调用链)...")
+
         self.main_window = main_window
         self.last_window = last_window
-        self.structure_type_mapping = {"栈 (Stack) 可视化工具": "Stack",
-                                       "顺序表 (SequenceList) 可视化工具": "SequenceList",
-                                       "链表 (LinkedList) 可视化工具": "LinkedList", "二叉树可视化工具": "BinaryTree",
-                                       "哈夫曼树可视化工具": "HuffmanTree",
-                                       "二叉搜索树 (BST) 可视化工具": "BinarySearchTree"}
+        self.structure_type_mapping = {
+            "栈 (Stack) 可视化工具": "Stack",
+            "顺序表 (SequenceList) 可视化工具": "SequenceList",
+            "链表 (LinkedList) 可视化工具": "LinkedList",
+            "二叉树可视化工具": "BinaryTree",
+            "哈夫曼树可视化工具": "HuffmanTree",
+            "二叉搜索树 (BST) 可视化工具": "BinarySearchTree",
+            "AVL树 (分步旋转演示版)": "AVLTree"
+        }
         self.current_structure_type = self.structure_type_mapping.get(title, "")
         self.data_structure = None
         self.animation_speed = 500
@@ -1080,7 +1087,8 @@ class BaseVisualizer(QWidget):
         self.recent_files_file = os.path.join(current_dir, "recent_files.json")
         self.load_recent_files()
 
-        # --- 新增属性：动画开关 ---
+        # === AI 配置 (请在此处填入正确的 Key) ===
+        self.api_key = "sk-e3e7f71402ad4dc28e87b9763b5c82f4"
         self.anim_enabled = True
 
         self.init_ui()
@@ -1090,9 +1098,12 @@ class BaseVisualizer(QWidget):
 
     def init_sound_effects(self):
         self.click_sound = QSoundEffect()
-        # 假设文件路径正确
-        self.click_sound.setSource(
-            QUrl.fromLocalFile("./DataStructureVisualization/button_click.wav"))
+        possible_paths = ["./DataStructureVisualization/button_click.wav",
+                          os.path.join(os.path.dirname(__file__), "DataStructureVisualization/button_click.wav")]
+        for p in possible_paths:
+            if os.path.exists(p):
+                self.click_sound.setSource(QUrl.fromLocalFile(p))
+                break
         self.click_sound.setVolume(0.7)
 
     def play_click_sound(self):
@@ -1105,14 +1116,11 @@ class BaseVisualizer(QWidget):
         root_layout.setSpacing(0)
         self.setLayout(root_layout)
 
-        # === 侧边栏配置 ===
+        # === 侧边栏 ===
         sidebar = QWidget()
-        # [修改点1] 减小宽度，适应小屏幕
         sidebar.setFixedWidth(320)
         sidebar.setStyleSheet("background-color: #f3f4f6; border-right: 1px solid #e5e7eb;")
-
         sidebar_layout = QVBoxLayout(sidebar)
-        # [修改点2] 减小边距和间距，防止高度溢出
         sidebar_layout.setContentsMargins(10, 15, 10, 15)
         sidebar_layout.setSpacing(10)
 
@@ -1123,37 +1131,27 @@ class BaseVisualizer(QWidget):
         title_label.setWordWrap(True)
         sidebar_layout.addWidget(title_label)
 
-        # === 核心操作区域 (使用 QScrollArea) ===
+        # === 核心操作区域 ===
         control_group = QGroupBox("核心操作")
-        # [修改点3] 适当减小最小高度限制
         control_group.setMinimumHeight(180)
         control_group.setStyleSheet(STYLES["group_box"])
-
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("border: none; background-color: transparent;")
-
         scroll_content = QWidget()
         scroll_content.setStyleSheet("background-color: transparent;")
-
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setSpacing(8)
         scroll_layout.setContentsMargins(2, 2, 2, 2)
-
         scroll_layout.addLayout(self._create_input_layout())
         scroll_layout.addLayout(self._create_button_layout())
         scroll_layout.addStretch()
-
         scroll.setWidget(scroll_content)
-
         group_layout = QVBoxLayout()
         group_layout.setContentsMargins(2, 15, 2, 2)
         group_layout.addWidget(scroll)
         control_group.setLayout(group_layout)
-
-        # 核心操作区也是主要区域，给予拉伸权重 1
         sidebar_layout.addWidget(control_group, 1)
-        # ==========================================
 
         # === 文件管理 ===
         file_group = QGroupBox("文件管理")
@@ -1174,51 +1172,45 @@ class BaseVisualizer(QWidget):
         file_group.setLayout(file_layout)
         sidebar_layout.addWidget(file_group, 0)
 
-        # === 最近保存 (ScrollArea) ===
+        # === 最近保存 ===
         recent_group = QGroupBox("最近保存")
         recent_group.setStyleSheet(STYLES["group_box"])
         recent_group_layout = QVBoxLayout()
         recent_group_layout.setContentsMargins(1, 15, 1, 1)
-
         self.recent_list_widget = QWidget()
         self.recent_list_widget.setStyleSheet("background-color: white;")
         self.recent_list_layout = QVBoxLayout(self.recent_list_widget)
         self.recent_list_layout.setSpacing(4)
         self.recent_list_layout.setContentsMargins(5, 5, 5, 5)
         self.recent_list_layout.setAlignment(Qt.AlignTop)
-
         scroll_recent = QScrollArea()
         scroll_recent.setWidgetResizable(True)
         scroll_recent.setWidget(self.recent_list_widget)
-        # 稍微减小高度
         scroll_recent.setMinimumHeight(100)
         scroll_recent.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
-
         recent_group_layout.addWidget(scroll_recent)
         recent_group.setLayout(recent_group_layout)
-
-        # 给最近保存列表也一点拉伸权重，但比核心操作小
         sidebar_layout.addWidget(recent_group, 1)
 
-        # === DSL 脚本控制区 ===
-        dsl_group = QGroupBox("DSL脚本控制区")
+        # === DSL / AI 智能控制区 ===
+        dsl_group = QGroupBox("智能控制台 (DSL / AI)")
         dsl_group.setStyleSheet(STYLES["group_box"])
         dsl_layout = QVBoxLayout(dsl_group)
-        # 减小边距
         dsl_layout.setContentsMargins(10, 15, 10, 10)
 
         self.dsl_input = QTextEdit()
-        self.dsl_input.setPlaceholderText("在此输入指令，例如：\nBUILD: 10, 20, 30\nINSERT: 40\nDELETE: 10")
+        self.dsl_input.setPlaceholderText(
+            "【AI模式】：直接输入如 '建一个包含5,3,8的树' \n【DSL模式】：输入指令如 'BUILD: 5, 3, 8'")
         self.dsl_input.setStyleSheet("border: 1px solid #d1d5db; border-radius: 6px; background-color: #f9fafb;")
-        # [修改点4] 限制高度，节省空间
         self.dsl_input.setMaximumHeight(80)
 
-        run_btn = QPushButton("执行脚本")
-        run_btn.setStyleSheet(STYLES["btn_primary"])
-        run_btn.clicked.connect(self.run_dsl)
+        # 这里的按钮连接到了 run_dsl，run_dsl 内部会决定是否调用 AI
+        self.run_btn = QPushButton("执行 / AI生成")
+        self.run_btn.setStyleSheet(STYLES["btn_primary"])
+        self.run_btn.clicked.connect(self.run_dsl)
 
         dsl_layout.addWidget(self.dsl_input)
-        dsl_layout.addWidget(run_btn)
+        dsl_layout.addWidget(self.run_btn)
         dsl_group.setLayout(dsl_layout)
 
         sidebar_layout.addWidget(dsl_group, 0)
@@ -1230,14 +1222,12 @@ class BaseVisualizer(QWidget):
         settings_layout.setContentsMargins(10, 15, 10, 10)
         settings_layout.setSpacing(8)
 
-        # 动画开关
         self.anim_checkbox = QCheckBox("启用动画效果")
         self.anim_checkbox.setChecked(self.anim_enabled)
         self.anim_checkbox.stateChanged.connect(self._toggle_animation)
         self.anim_checkbox.setStyleSheet("font-family: 'Microsoft YaHei'; color: #4b5563; padding-left: 0;")
         settings_layout.addWidget(self.anim_checkbox)
 
-        # 速度控制
         speed_layout = QHBoxLayout()
         speed_lbl = QLabel("动画速度(ms):")
         speed_lbl.setStyleSheet("font-family: 'Microsoft YaHei'; color: #4b5563;")
@@ -1248,7 +1238,6 @@ class BaseVisualizer(QWidget):
         speed_layout.addWidget(self.speed_slider)
         settings_layout.addLayout(speed_layout)
 
-        # 返回按钮
         ret_layout = QHBoxLayout()
         self.button_return = QPushButton("返回上一级")
         self.button_return.clicked.connect(self.on_button_return_clicked)
@@ -1262,16 +1251,11 @@ class BaseVisualizer(QWidget):
         settings_group.setLayout(settings_layout)
         sidebar_layout.addWidget(settings_group, 0)
 
-        # 移除底部的 addStretch，让上面的 addWidget(..., 1) 自动分配空间
-        # sidebar_layout.addStretch()
-
-        # === 右侧可视化内容区域 ===
+        # === 右侧可视化内容 ===
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
-        # 减小外边距
         content_layout.setContentsMargins(15, 15, 15, 15)
         content_layout.setSpacing(15)
-
         visual_box = QGroupBox("可视化演示")
         visual_box.setStyleSheet(
             "QGroupBox { background-color: white; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; font-weight: bold; color: #1f2937; } QGroupBox::title { subcontrol-origin: margin; left: 15px; padding: 0 5px; top: 10px; }")
@@ -1281,27 +1265,21 @@ class BaseVisualizer(QWidget):
         vb_layout.addWidget(self.visual_area)
         visual_box.setLayout(vb_layout)
         content_layout.addWidget(visual_box)
-
         self.status_label = QLabel("就绪")
         self.status_label.setStyleSheet(
             "background: #eff6ff; color: #1e40af; padding: 10px; border-radius: 6px; border: 1px solid #bfdbfe; font-family: 'Microsoft YaHei'; font-weight: bold;")
         self.status_label.setAlignment(Qt.AlignCenter)
         content_layout.addWidget(self.status_label)
-
         root_layout.addWidget(sidebar)
         root_layout.addWidget(content_widget)
 
-    # --- 新增方法 ---
     def _toggle_animation(self, state):
         self.anim_enabled = state == Qt.Checked
-        # 如果禁用动画，强制停止当前动画
         if not self.anim_enabled and hasattr(self, 'anim_timer') and self.anim_timer.isActive():
             self.anim_timer.stop()
             self.visual_area.anim_state = {}
             self.update_display()
         self.status_label.setText(f"动画 {'已启用' if self.anim_enabled else '已禁用'}")
-
-    # ----------------
 
     def _create_input_layout(self):
         raise NotImplementedError
@@ -1310,19 +1288,13 @@ class BaseVisualizer(QWidget):
         raise NotImplementedError
 
     def on_button_return_main_clicked(self):
-        self.play_click_sound()
-        self.back_to_main()
+        self.play_click_sound(); self.back_to_main()
 
     def on_button_return_clicked(self):
-        self.play_click_sound()
-        if self.last_window:
-            self.last_window.show()
-        self.close()
+        self.play_click_sound(); (self.last_window.show() if self.last_window else None); self.close()
 
     def back_to_main(self):
-        if self.main_window:
-            self.main_window.show()
-        self.close()
+        (self.main_window.show() if self.main_window else None); self.close()
 
     def update_display(self):
         try:
@@ -1337,8 +1309,7 @@ class BaseVisualizer(QWidget):
     def update_speed(self):
         try:
             val = int(self.speed_slider.text())
-            if val > 0:
-                self.animation_speed = val
+            if val > 0: self.animation_speed = val
         except:
             pass
         self.speed_slider.setText(str(self.animation_speed))
@@ -1371,7 +1342,8 @@ class BaseVisualizer(QWidget):
 
     def update_recent_files_display(self):
         for i in reversed(range(self.recent_list_layout.count())):
-            self.recent_list_layout.itemAt(i).widget().deleteLater()
+            item = self.recent_list_layout.itemAt(i)
+            if item.widget(): item.widget().deleteLater()
         filtered = [f for f in self.recent_files if f.get('type') == self.current_structure_type]
         if not filtered:
             self.recent_list_layout.addWidget(QLabel("暂无记录"))
@@ -1414,8 +1386,7 @@ class BaseVisualizer(QWidget):
     def save_structure(self):
         fname, _ = QFileDialog.getSaveFileName(self, "保存", "", "JSON (*.json)")
         if fname:
-            if not fname.endswith('.json'):
-                fname += '.json'
+            if not fname.endswith('.json'): fname += '.json'
             try:
                 from model import DataStructureManager
                 if DataStructureManager.save_structure(self.data_structure, fname):
@@ -1438,25 +1409,126 @@ class BaseVisualizer(QWidget):
             except Exception as e:
                 QMessageBox.warning(self, "错误", str(e))
 
+    # === [核心修复] 智能路由：run_dsl -> handle_ai_query -> _get_dsl_system_prompt ===
+
     def run_dsl(self):
         script = self.dsl_input.toPlainText().strip()
         if not script:
-            QMessageBox.warning(self, "提示", "脚本内容不能为空")
+            QMessageBox.warning(self, "提示", "内容不能为空")
             return
 
-        handler = DSLHandler(self)
+        # 1. 智能判别：如果包含中文，或者不是以标准 DSL 关键字开头，就认为是 AI 请求
+        has_chinese = any('\u4e00' <= char <= '\u9fff' for char in script)
+        is_standard_dsl = any(script.upper().startswith(cmd) for cmd in ['BUILD', 'INSERT', 'DELETE', 'REMOVE'])
 
-        # --- 传递动画标志：0-执行动画，1-不执行动画 ---
+        if has_chinese or (not is_standard_dsl and len(script) > 0):
+            print("检测到自然语言，调用 AI 处理...")
+            self.handle_ai_query(script)  # <--- 这里显式调用了 handle_ai_query
+            return
+
+        # 2. 如果是 DSL，直接执行
+        print("检测到 DSL 指令，直接执行...")
+        self._execute_dsl_directly(script)
+
+    def _execute_dsl_directly(self, script):
+        handler = DSLHandler(self)
         flag = 0 if self.anim_enabled else 1
         result = handler.execute_script(script, flag)
-
         if result == "执行成功":
-            # 无论是否执行动画，都需要最终刷新
             self.update_display()
-            self.status_label.setText("DSL 脚本执行完毕")
+            self.status_label.setText("指令执行完毕")
         else:
             QMessageBox.warning(self, "执行错误", result)
 
+    def _get_dsl_system_prompt(self):
+        """生成 Prompt，包含严格的防代码生成指令"""
+        stype = self.current_structure_type
+        # 基础规则：强制不解释，不写代码
+        common_rules = """System: 你是一个数据结构可视化DSL生成器。
+【严格禁止】：不要解释，不要写Python/Java代码，不要Markdown格式，只输出DSL指令。
+【通用DSL格式】：
+- BUILD: val1, val2... (清空并构建)
+- INSERT: val (插入)
+- DELETE: val (删除)
+"""
+        specific_rules = ""
+        if stype == "Stack":
+            specific_rules = "\n规则(Stack):\n- BUILD: v1, v2...\n- INSERT: val\n- DELETE: (无参)"
+        elif stype in ["SequenceList", "LinkedList"]:
+            specific_rules = "\n规则(List):\n- BUILD: v1, v2...\n- INSERT: val, idx (例: INSERT: 99, 1)\n- DELETE: idx"
+        elif stype in ["BinarySearchTree", "AVLTree"]:
+            specific_rules = "\n规则(BST/AVL):\n- BUILD: v1, v2...\n- INSERT: val\n- DELETE: val"
+        elif stype == "BinaryTree":
+            specific_rules = "\n规则(BinaryTree):\n- BUILD: root, n1...\n- INSERT: p_idx, val, L/R"
+        elif stype == "HuffmanTree":
+            specific_rules = "\n规则(Huffman):\n- BUILD: A:10, B:20..."
+        else:
+            specific_rules = f"\n当前结构({stype})，请使用通用指令。"
+
+        return common_rules + specific_rules
+
+    def handle_ai_query(self, user_text):
+        """处理 AI 请求"""
+        if "sk-" not in self.api_key:
+            QMessageBox.warning(self, "API Key 缺失", "请在代码中设置正确的 API Key")
+            return
+
+        self.run_btn.setEnabled(False)
+        self.run_btn.setText("AI 思考中...")
+        self.status_label.setText("正在发送请求...")
+
+        # 1. 获取 System Rules (这里显式调用了 _get_dsl_system_prompt)
+        system_instruction = self._get_dsl_system_prompt()
+
+        # 2. 显式拼接 Prompt
+        full_prompt = f"{system_instruction}\n\nUser Request: {user_text}\n\nDSL Output:"
+
+        # 3. 控制台打印确认长度 (如果 input_tokens 还是 22，请检查这里是否打印)
+        print(f"DEBUG: 发送给 AI 的 Prompt 总长度: {len(full_prompt)}")
+        print(f"DEBUG: System 部分: {system_instruction[:50]}...")
+
+        try:
+            from qianwen_api import QianWenAPI, AIAssistantThread
+            self.api_client = QianWenAPI(self.api_key)
+            self.ai_thread = AIAssistantThread(self.api_client, full_prompt)
+            self.ai_thread.response_received.connect(self.on_ai_response)
+            self.ai_thread.start()
+        except ImportError:
+            QMessageBox.critical(self, "错误", "缺少 qianwen_api 模块")
+            self.run_btn.setEnabled(True)
+
+    def on_ai_response(self, response_text):
+        self.run_btn.setEnabled(True)
+        self.run_btn.setText("执行 / AI生成")
+
+        if "API调用失败" in response_text or "错误" in response_text:
+            QMessageBox.warning(self, "AI 错误", response_text)
+            self.status_label.setText("AI 调用失败")
+            return
+
+        import re
+        dsl_code = response_text
+        code_block = re.search(r"```(?:text|dsl)?\n(.*?)```", response_text, re.DOTALL)
+        if code_block:
+            dsl_code = code_block.group(1).strip()
+
+        valid_lines = []
+        for line in dsl_code.split('\n'):
+            line = line.strip()
+            if ':' in line:
+                cmd = line.split(':')[0].upper()
+                if cmd in ['BUILD', 'INSERT', 'DELETE', 'REMOVE']:
+                    valid_lines.append(line)
+
+        final_dsl = "\n".join(valid_lines)
+
+        if not final_dsl:
+            self.dsl_input.setText(f"# AI 未生成有效 DSL，原始回复：\n{response_text}")
+            QMessageBox.information(self, "AI 回复", "未能提取有效指令，请检查输入描述。")
+        else:
+            self.dsl_input.setText(final_dsl)
+            self.status_label.setText("AI 指令已生成，正在执行...")
+            QTimer.singleShot(200, lambda: self._execute_dsl_directly(final_dsl))
 
 class StackVisualizer(BaseVisualizer):
     def __init__(self, main_window=None, lastwindow=None):

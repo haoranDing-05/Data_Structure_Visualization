@@ -803,7 +803,7 @@ if __name__ == "__main__":
     # -----------------------------
     app = QApplication(sys.argv)
     window = MainWindow()
-    #ai_window = AI_Floating_Window()
+    ai_window = AI_Floating_Window()
     window.show()
-    #ai_window.show()
+    ai_window.show()
     sys.exit(app.exec_())
