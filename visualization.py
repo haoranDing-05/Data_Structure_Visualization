@@ -1339,9 +1339,16 @@ class BaseVisualizer(QWidget):
         self.save_btn.clicked.connect(self.save_structure)
         self.load_btn = QPushButton("打开结构")
         self.load_btn.setStyleSheet(STYLES["btn_primary"])
+        # === 新增：导出图片按钮 ===
+        self.export_btn = QPushButton("导出图片")
+        # 使用 warning 样式(橙色)或者 primary 样式(蓝色)都可以，这里用紫色区分一下
+        self.export_btn.setStyleSheet(STYLES["btn_random"])
+        self.export_btn.clicked.connect(self.export_as_image)
+        # =======================
         self.load_btn.clicked.connect(self.load_structure)
         btn_io_layout.addWidget(self.save_btn)
         btn_io_layout.addWidget(self.load_btn)
+        btn_io_layout.addWidget(self.export_btn)
         file_layout.addLayout(btn_io_layout)
         file_group.setLayout(file_layout)
         sidebar_layout.addWidget(file_group, 0)
@@ -1583,7 +1590,25 @@ class BaseVisualizer(QWidget):
             except Exception as e:
                 QMessageBox.warning(self, "错误", str(e))
 
-    # === [核心修复] 智能路由：run_dsl -> handle_ai_query -> _get_dsl_system_prompt ===
+    def export_as_image(self):
+        """导出当前绘图区域为图片"""
+        # 1. 打开文件保存对话框
+        fname, _ = QFileDialog.getSaveFileName(self, "导出图片", "visualization_export.png",
+                                               "Images (*.png *.jpg *.bmp)")
+
+        if fname:
+            try:
+                # 2. 抓取 visual_area 控件的内容
+                # grab() 方法会截取控件当前的像素状态
+                pixmap = self.visual_area.grab()
+
+                # 3. 保存文件
+                if pixmap.save(fname):
+                    QMessageBox.information(self, "成功", f"图片已保存至:\n{fname}")
+                else:
+                    QMessageBox.warning(self, "失败", "图片保存失败，请检查路径权限。")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"导出出错: {str(e)}")
 
     def run_dsl(self):
         script = self.dsl_input.toPlainText().strip()
@@ -1593,8 +1618,10 @@ class BaseVisualizer(QWidget):
 
         # 1. 智能判别：如果包含中文，或者不是以标准 DSL 关键字开头，就认为是 AI 请求
         has_chinese = any('\u4e00' <= char <= '\u9fff' for char in script)
-        is_standard_dsl = any(script.upper().startswith(cmd) for cmd in ['BUILD', 'INSERT', 'DELETE', 'REMOVE','DEQUEUE','ENQUEUE'])
-
+        is_standard_dsl = any(script.upper().startswith(cmd) for cmd in [
+            'BUILD', 'INSERT', 'DELETE', 'REMOVE',
+            'ENQUEUE', 'DEQUEUE', 'PUSH', 'POP', 'SEARCH'
+        ])
         if has_chinese or (not is_standard_dsl and len(script) > 0):
             print("检测到自然语言，调用 AI 处理...")
             self.handle_ai_query(script)  # <--- 这里显式调用了 handle_ai_query

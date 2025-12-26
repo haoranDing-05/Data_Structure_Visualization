@@ -993,6 +993,7 @@ class DataStructureManager:
             return False
 
     @staticmethod
+    @staticmethod
     def load_structure(filename):
         """从文件加载数据结构"""
         try:
@@ -1000,16 +1001,24 @@ class DataStructureManager:
                 data = json.load(f)
 
             structure_type = data.get('type')
+
+            # === 线性结构 ===
             if structure_type == 'SequenceList':
                 return SequenceList.from_dict(data)
             elif structure_type == 'LinkedList':
                 return LinkedList.from_dict(data)
             elif structure_type == 'Stack':
                 return Stack.from_dict(data)
+            elif structure_type == 'Queue':  # 【新增】支持队列加载
+                return Queue.from_dict(data)
+
+            # === 树形结构 ===
             elif structure_type == 'BinaryTree':
                 return BinaryTree.from_dict(data)
             elif structure_type == 'BinarySearchTree':
                 return BinarySearchTree.from_dict(data)
+            elif structure_type == 'AVLTree':  # 【新增】支持AVL树加载
+                return AVLTree.from_dict(data)
             elif structure_type == 'HuffmanTree':
                 return HuffmanTree.from_dict(data)
             else:
