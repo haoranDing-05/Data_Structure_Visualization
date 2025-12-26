@@ -4,11 +4,16 @@ from PyQt5.QtWidgets import QMessageBox
 # 导入必要的类，以便进行类型检查和方法调用
 try:
     # 假设 model.py 中的类结构如下
-    from model import Stack, SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, HuffmanStructNode, \
+    from model import Stack, Queue, SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, \
+        HuffmanStructNode, \
         AVLTree
 except ImportError:
     # 如果 model.py 不存在，使用桩代码，确保 DSLHandler 可以运行
     class Stack:
+        pass
+
+
+    class Queue:
         pass
 
 
@@ -60,7 +65,6 @@ class DSLHandler:
                 self.vis.visual_area.anim_state = {}
 
             # 对于 BST/Tree/AVL，直接执行操作
-            # [修改点] 增加 AVLTreeVisualizer
             is_tree_visualizer = self.vis.__class__.__name__ in ['BinaryTreeVisualizer', 'BinarySearchTreeVisualizer',
                                                                  'HuffmanTreeVisualizer', 'AVLTreeVisualizer']
 
@@ -96,12 +100,18 @@ class DSLHandler:
     def _parse_and_run_line(self, line):
         # 分割指令和参数，例如 "INSERT: 50" -> ["INSERT", "50"]
         if ':' not in line:
-            raise ValueError("语法错误，缺少冒号 (格式: COMMAND: args)")
-
-        cmd, args_str = line.split(':', 1)
-        cmd = cmd.strip().upper()
-        # 移除空参数，并保留所有参数，包括可能的空格
-        args = [x.strip() for x in args_str.split(',')]
+            # 特殊情况：DEQUEUE 可能没有参数，但为了统一格式，建议还是带冒号
+            # 或者在这里做一个宽容处理，如果指令是 DEQUEUE 且没冒号，视为无参
+            if line.strip().upper() == 'DEQUEUE':
+                cmd = 'DEQUEUE'
+                args = []
+            else:
+                raise ValueError("语法错误，缺少冒号 (格式: COMMAND: args)")
+        else:
+            cmd, args_str = line.split(':', 1)
+            cmd = cmd.strip().upper()
+            # 移除空参数，并保留所有参数，包括可能的空格
+            args = [x.strip() for x in args_str.split(',')]
 
         structure_type = self.ds.__class__.__name__
 
@@ -129,46 +139,71 @@ class DSLHandler:
 
             if structure_type == 'Stack':
                 for val in vals: self.ds.push(val)
+            elif structure_type == 'Queue':  # [新增] 队列批量构建
+                for val in vals: self.ds.enqueue(val)
             elif structure_type == 'SequenceList':
                 for i, val in enumerate(vals): self.ds.insert(self.ds.length(), val)  # 默认尾插
             elif structure_type == 'LinkedList':
                 for val in vals: self.ds.append(val)
 
-            # [修改点] 增加 AVLTree
             elif structure_type in ['BinaryTree', 'BinarySearchTree', 'AVLTree']:
                 if not vals: return
 
                 # 对于 BinaryTree，第一个元素视为根节点
                 if structure_type == 'BinaryTree':
-                    # 重新初始化树并设置根节点
                     self.vis.data_structure = BinaryTree(vals[0])
-                    self.ds = self.vis.data_structure  # 更新 ds 引用
-
-                    # 尝试进行顺序完全二叉树插入 (简化处理)
+                    self.ds = self.vis.data_structure
                     for i, val in enumerate(vals[1:]):
                         parent_idx = (i + 1 - 1) // 2
                         try:
-                            if (i + 1) % 2 != 0:  # 奇数索引为左子节点
+                            if (i + 1) % 2 != 0:
                                 self.ds.insert_left(parent_idx, val)
-                            else:  # 偶数索引为右子节点
+                            else:
                                 self.ds.insert_right(parent_idx, val)
                         except (IndexError, ValueError):
-                            # 忽略插入失败 (如父节点不存在或位置被占用，通常不会发生于顺序插入)
                             pass
 
-                # [修改点] 对于 BinarySearchTree 和 AVLTree，视为批量 insert
                 elif structure_type in ['BinarySearchTree', 'AVLTree']:
                     for val in vals: self.ds.insert(val)
 
-        # === 2. INSERT 指令 ===
+        # === 2. ENQUEUE 指令 (Queue 专用) ===
+        elif cmd == 'ENQUEUE':
+            if structure_type != 'Queue':
+                raise ValueError("ENQUEUE 指令仅适用于队列 (Queue)")
+
+            for item in args:
+                if not item: continue
+                val = self._get_val_from_str(item)
+                self.ds.enqueue(val)
+
+        # === 3. DEQUEUE 指令 (Queue 专用) ===
+        elif cmd == 'DEQUEUE':
+            if structure_type != 'Queue':
+                raise ValueError("DEQUEUE 指令仅适用于队列 (Queue)")
+
+            # 默认出队 1 次，如果指定了参数 (如 DEQUEUE: 2)，则出队 n 次
+            count = 1
+            if args and args[0]:
+                try:
+                    count = int(args[0])
+                except ValueError:
+                    pass  # 如果参数不是数字，忽略，默认1次
+
+            for _ in range(count):
+                if self.ds.is_empty():
+                    # 队列空时停止或报错，这里选择安全停止
+                    break
+                self.ds.dequeue()
+
+        # === 4. INSERT 指令 ===
         elif cmd == 'INSERT':
             if not args:
-                raise ValueError("INSERT 缺少参数 (格式: INSERT: value[, index] 或 INSERT: p_idx, value, L/R)")
+                raise ValueError("INSERT 缺少参数")
 
-            # --- 线性结构：Stack, SequenceList, LinkedList ---
+            # --- 线性结构 ---
             if structure_type in ['Stack', 'SequenceList', 'LinkedList']:
                 val = self._get_val_from_str(args[0])
-                idx = -1  # 默认为尾插或栈顶操作
+                idx = -1
 
                 if len(args) == 2:
                     try:
@@ -177,40 +212,33 @@ class DSLHandler:
                         raise ValueError("INSERT 索引参数必须为整数")
 
                 if structure_type == 'Stack':
-                    self.ds.push(val)  # 忽略索引参数
+                    self.ds.push(val)
                 elif structure_type in ['SequenceList', 'LinkedList']:
-                    if idx == -1 or idx == self.ds.length():  # 尾插
+                    if idx == -1 or idx == self.ds.length():
                         self.ds.insert(self.ds.length(), val)
                     elif 0 <= idx < self.ds.length():
                         self.ds.insert(idx, val)
                     else:
                         raise IndexError(f"INSERT 索引 {idx} 超出范围")
 
-            # --- 树结构：BinarySearchTree 和 AVLTree ---
-            # [修改点] 增加 AVLTree，并改为循环处理 args 以支持 "INSERT: 10, 20"
+            # --- 树结构 ---
             elif structure_type in ['BinarySearchTree', 'AVLTree']:
                 for item in args:
                     val = self._get_val_from_str(item)
-                    self.ds.insert(val)  # BST/AVL 忽略其他参数，只插入值
+                    self.ds.insert(val)
 
-            # --- 树结构：BinaryTree ---
             elif structure_type == 'BinaryTree':
                 if len(args) != 3:
                     raise ValueError("BinaryTree INSERT 格式: INSERT: p_idx, value, L/R")
-
                 try:
                     p_idx = int(args[0])
                 except ValueError:
                     raise ValueError("父节点索引必须为整数")
-
                 val = self._get_val_from_str(args[1])
                 direction = args[2].strip().upper()
 
-                if self.ds.is_empty():
-                    # 允许通过 INSERT 0, value, L/R 创建根节点，但更推荐 BUILD
-                    if p_idx == 0:
-                        # 假设 BinaryTree 不为空，如果为空，则不允许插入子节点
-                        raise ValueError("空树请使用 BUILD 命令创建根节点")
+                if self.ds.is_empty() and p_idx == 0:
+                    raise ValueError("空树请使用 BUILD 命令创建根节点")
 
                 if direction == 'L':
                     self.ds.insert_left(p_idx, val)
@@ -219,22 +247,20 @@ class DSLHandler:
                 else:
                     raise ValueError("方向参数必须是 L 或 R")
 
-        # === 3. DELETE/REMOVE 指令 ===
+        # === 5. DELETE/REMOVE 指令 ===
         elif cmd in ['DELETE', 'REMOVE']:
-            if not args:
-                raise ValueError(f"{cmd} 缺少参数")
+            if not args and structure_type != 'Stack':
+                # Stack DELETE 可以无参(Pop)，其他通常需要参数
+                if structure_type not in ['Stack', 'Queue']:  # Queue has DEQUEUE, handled above
+                    raise ValueError(f"{cmd} 缺少参数")
 
-            # --- 线性结构 ---
             if structure_type in ['Stack', 'SequenceList', 'LinkedList']:
-
-                # Stack：只支持 pop (忽略所有参数)
                 if structure_type == 'Stack':
                     if self.ds.is_empty():
                         raise IndexError("栈为空，无法 pop")
                     self.ds.pop()
                     return
 
-                # SequenceList / LinkedList：支持按索引删除
                 try:
                     idx = int(args[0])
                 except ValueError:
@@ -245,36 +271,27 @@ class DSLHandler:
                 else:
                     raise IndexError(f"DELETE 索引 {idx} 超出范围")
 
-            # --- 树结构：BinarySearchTree 和 AVLTree ---
-            # [修改点] 增加 AVLTree，并改为循环处理 args 以支持 "DELETE: 40, 50"
             elif structure_type in ['BinarySearchTree', 'AVLTree']:
                 for item in args:
                     val = self._get_val_from_str(item)
                     if not self.ds.delete(val):
-                        # 这里可以选择抛出异常，或者忽略不存在的元素继续删除下一个
-                        # 为了严谨性，这里抛出异常
                         raise ValueError(f"BST/AVL 中未找到要删除的元素: {val}")
 
             elif structure_type == 'BinaryTree':
-                # BinaryTree 删除通常按索引删除子树
                 try:
                     idx = int(args[0])
                 except ValueError:
                     raise ValueError("BinaryTree DELETE 索引参数必须为整数")
-
                 node_to_del = self.ds._get_node(idx)
                 if not node_to_del:
                     raise IndexError(f"BinaryTree 中索引 {idx} 节点不存在")
-
                 if node_to_del == self.ds.root:
-                    self.ds.clear()  # 删除根节点，清空树
+                    self.ds.clear()
                 else:
                     if node_to_del.parent.left_child == node_to_del:
                         node_to_del.parent.left_child = None
                     else:
                         node_to_del.parent.right_child = None
-
-                    # 简化处理：大小需要重新计算，这里仅减1
                     self.ds._size -= 1
 
         else:

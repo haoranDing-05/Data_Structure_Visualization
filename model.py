@@ -282,6 +282,40 @@ class Stack(SequenceList, Serializable):
         return obj
 
 
+class Queue(SequenceList, Serializable):
+    """队列类 (基于顺序表实现)"""
+
+    def enqueue(self, item):
+        """入队：在队尾添加元素"""
+        self.append(item)
+
+    def dequeue(self):
+        """出队：移除队头元素"""
+        if self.is_empty():
+            raise IndexError("队列为空")
+        return self.remove(0)
+
+    def peek(self):
+        """查看队头元素"""
+        if self.is_empty():
+            raise IndexError("队列为空")
+        return self.get(0)
+
+    def display(self):
+        print("队列内容:", self.items)
+
+    def to_dict(self):
+        return {
+            'type': 'Queue',
+            'items': self.items.copy()
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        obj = cls()
+        obj.items = data['items'].copy()
+        return obj
+
 class BinaryTreeNode:
     """二叉树节点类"""
 

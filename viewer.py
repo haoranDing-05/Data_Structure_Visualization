@@ -7,9 +7,12 @@ from PyQt5.QtMultimedia import QSoundEffect
 
 import traceback
 
+# 确保导入了所有的 Visualizer，包括 QueueVisualizer
 from visualization import StackVisualizer, SequenceListVisualizer, LinkedListVisualizer, BinaryTreeVisualizer, \
-    HuffmanTreeVisualizer, BinarySearchTreeVisualizer, AVLTreeVisualizer
+    HuffmanTreeVisualizer, BinarySearchTreeVisualizer, AVLTreeVisualizer, QueueVisualizer
 from qianwen_api import QianWenAPI, AIAssistantThread
+# 【关键修复】导入 DSLHandler，用于本地执行指令
+from DSL_handler import DSLHandler
 
 
 def adjust_window_to_screen(window, width_ratio=0.6, height_ratio=0.8):
@@ -18,20 +21,19 @@ def adjust_window_to_screen(window, width_ratio=0.6, height_ratio=0.8):
     target_width = int(screen.width() * width_ratio)
     target_height = int(screen.height() * height_ratio)
 
-    # 居中计算
     x = (screen.width() - target_width) // 2
     y = (screen.height() - target_height) // 2
 
     window.setGeometry(x, y, target_width, target_height)
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.init_sound_effects()
-        #是否添加背景音乐？
         self.setWindowTitle("数据结构课设——数据结构可视化")
 
-        adjust_window_to_screen(self, 0.5, 0.8) # 宽度占屏幕50%，高度占80%
+        adjust_window_to_screen(self, 0.5, 0.8)
 
         central_frame = QFrame()
         self.setCentralWidget(central_frame)
@@ -94,6 +96,10 @@ class MainWindow(QMainWindow):
         main_layout.addSpacing(80)
         self.ai_assistant = None
 
+        # 保存子窗口引用以便查找
+        self.sequential_window = None
+        self.tree_window = None
+
     def init_sound_effects(self):
         self.click_sound = QSoundEffect()
         self.click_sound.setSource(QUrl.fromLocalFile("./DataStructureVisualization/button_click.wav"))
@@ -108,7 +114,8 @@ class MainWindow(QMainWindow):
         self.go_to_sequential()
 
     def go_to_sequential(self):
-        self.sequential_window = LinearStructureWindow(self)
+        if not self.sequential_window:
+            self.sequential_window = LinearStructureWindow(self)
         self.sequential_window.show()
         self.hide()
 
@@ -117,7 +124,8 @@ class MainWindow(QMainWindow):
         self.go_to_tree()
 
     def go_to_tree(self):
-        self.tree_window = TreeStructureWindow(self)
+        if not self.tree_window:
+            self.tree_window = TreeStructureWindow(self)
         self.tree_window.show()
         self.hide()
 
@@ -135,11 +143,16 @@ class BubbleWidget(QFrame):
         super().__init__(parent)
         self.init_sound_effects()
         self.preload_sound()
+
+        # 请确保此 API Key 有效
+        self.api_key = "sk-e3e7f71402ad4dc28e87b9763b5c82f4"
+
         self.setup_ui()
         self.direction = "right"
-        self.qianwen_api = None
+
+        self.qianwen_api = QianWenAPI(self.api_key)
         self.ai_thread = None
-        self.send_btn.setEnabled(False)
+
         self.welcome_shown = True
 
     def init_sound_effects(self):
@@ -158,97 +171,85 @@ class BubbleWidget(QFrame):
             BubbleWidget {
                 background: white;
                 border-radius: 15px;
+                border: 1px solid #e0e0e0;
             }
         """)
         self.setAutoFillBackground(True)
         main_layout = QVBoxLayout(self)
-        title = QLabel("燕小北")
+
+        title = QLabel("燕小北 AI 助手")
         title.setStyleSheet("""
             QLabel {
-                font-size: 16px;
+                font-size: 18px;
                 font-weight: bold;
                 color: #1565c0;
-                padding: 5px;
+                padding: 10px;
+                border-bottom: 1px solid #eee;
             }
         """)
         title.setAlignment(Qt.AlignCenter)
-        api_layout = QHBoxLayout()
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setPlaceholderText("输入通义千问API Key")
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        self.api_key_input.setStyleSheet("""
-                    QLineEdit {
-                        border: 1px solid #90caf9;
-                        border-radius: 5px;
-                        padding: 5px;
-                        background: white;
-                    }
-                """)
-        config_btn = QPushButton("配置")
-        config_btn.setFixedSize(60, 30)
-        config_btn.setStyleSheet("""
-                    QPushButton {
-                        background: #42a5f5;
-                        color: white;
-                        border: none;
-                        border-radius: 5px;
-                    }
-                    QPushButton:hover {
-                        background: #64b5f6;
-                    }
-                """)
-        config_btn.clicked.connect(self.config_api)
-        api_layout.addWidget(self.api_key_input)
-        api_layout.addWidget(config_btn)
+
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
         self.chat_display.setStyleSheet("""
                     QTextEdit {
-                        background: white;
-                        border: 1px solid #90caf9;
+                        background: #f5f5f5;
+                        border: none;
                         border-radius: 8px;
-                        padding: 8px;
-                        font-size: 12px;
+                        padding: 10px;
+                        font-size: 14px;
+                        font-family: "Microsoft YaHei";
                     }
                 """)
+
         input_layout = QHBoxLayout()
         self.question_input = QLineEdit()
-        self.question_input.setPlaceholderText("输入你的问题...")
+        self.question_input.setPlaceholderText("输入问题或DSL指令 (如 ENQUEUE:8)...")
         self.question_input.setStyleSheet("""
                     QLineEdit {
-                        border: 1px solid #90caf9;
-                        border-radius: 5px;
-                        padding: 5px;
+                        border: 1px solid #bdbdbd;
+                        border-radius: 20px;
+                        padding: 8px 15px;
                         background: white;
+                        font-size: 14px;
+                    }
+                    QLineEdit:focus {
+                        border: 1px solid #42a5f5;
                     }
                 """)
         self.question_input.returnPressed.connect(self.send_question)
+
         self.send_btn = QPushButton("发送")
-        self.send_btn.setFixedSize(60, 30)
+        self.send_btn.setFixedSize(70, 36)
         self.send_btn.setStyleSheet("""
                     QPushButton {
                         background: #42a5f5;
                         color: white;
                         border: none;
-                        border-radius: 5px;
+                        border-radius: 18px;
+                        font-weight: bold;
                     }
-                    QPushButton:hover:enabled {
+                    QPushButton:hover {
                         background: #64b5f6;
                     }
+                    QPushButton:pressed {
+                        background: #1e88e5;
+                    }
                     QPushButton:disabled {
-                        background: #bdbdbd;
+                        background: #e0e0e0;
+                        color: #9e9e9e;
                     }
                 """)
         self.send_btn.clicked.connect(self.send_question)
-        self.send_btn.setEnabled(False)
+        self.send_btn.setEnabled(True)
+
         input_layout.addWidget(self.question_input)
         input_layout.addWidget(self.send_btn)
+
         main_layout.addWidget(title)
-        main_layout.addLayout(api_layout)
-        main_layout.addWidget(QLabel("对话记录:"))
-        main_layout.addWidget(self.chat_display)
-        main_layout.addWidget(QLabel("输入问题:"))
+        main_layout.addWidget(self.chat_display, 1)
         main_layout.addLayout(input_layout)
+        main_layout.setContentsMargins(15, 15, 15, 15)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -257,49 +258,131 @@ class BubbleWidget(QFrame):
             self.welcome_shown = False
 
     def show_welcome_message(self):
-        welcome_message = "你好！我是燕小北，你的AI助手。我可以帮你解答关于数据结构的问题，比如线性结构、树形结构等各种算法和概念。请先配置API Key，然后就可以开始提问了！"
+        welcome_message = "你好！我是燕小北。你可以问我问题，也可以直接输入 DSL 指令（如 QUEUE ENQUEUE: 8）来控制动画！"
         self.show_message("燕小北", welcome_message)
         if not self.click_sound.source().isEmpty() and AI_Floating_Window.welcome_sound_play:
             self.click_sound.play()
             AI_Floating_Window.welcome_sound_play = False
 
-    def config_api(self):
-        api_key = self.api_key_input.text().strip()
-        if not api_key:
-            self.show_message("系统", "请输入API Key")
+    # 【核心逻辑 1】检测是否为 DSL 指令
+    def check_is_dsl(self, text):
+        """检测输入是否为 DSL 指令"""
+        # 必须把 QUEUE, ENQUEUE, DEQUEUE 加进去
+        keywords = ['BUILD', 'INSERT', 'DELETE', 'SEARCH', 'PUSH', 'POP',
+                    'ENQUEUE', 'DEQUEUE', 'QUEUE', 'STACK', 'BST', 'AVL',
+                    'SEQLIST', 'LINKEDLIST', 'BINARYTREE', 'HUFFMANTREE']
+        upper_text = text.strip().upper()
+        # 只要以关键字开头，就认为是指令
+        for kw in keywords:
+            if upper_text.startswith(kw):
+                return True
+        return False
+
+    def get_active_visualizer(self):
+        """查找当前激活的可视化窗口"""
+        # 1. 找到主窗口
+        main_win = None
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, MainWindow):
+                main_win = widget
+                break
+
+        if not main_win: return None
+
+        # 2. 检查线性结构窗口
+        if main_win.sequential_window and main_win.sequential_window.isVisible():
+            lw = main_win.sequential_window
+            # 依次检查哪个子窗口是显示的
+            if hasattr(lw, 'stack_window') and lw.stack_window and lw.stack_window.isVisible(): return lw.stack_window
+            if hasattr(lw, 'queue_window') and lw.queue_window and lw.queue_window.isVisible(): return lw.queue_window
+            if hasattr(lw,
+                       'sequencelist_window') and lw.sequencelist_window and lw.sequencelist_window.isVisible(): return lw.sequencelist_window
+            if hasattr(lw,
+                       'linkedlist_window') and lw.linkedlist_window and lw.linkedlist_window.isVisible(): return lw.linkedlist_window
+
+        # 3. 检查树形结构窗口
+        if main_win.tree_window and main_win.tree_window.isVisible():
+            tw = main_win.tree_window
+            if hasattr(tw, 'BST_window') and tw.BST_window and tw.BST_window.isVisible(): return tw.BST_window
+            if hasattr(tw, 'AVL_window') and tw.AVL_window and tw.AVL_window.isVisible(): return tw.AVL_window
+            if hasattr(tw,
+                       'Binary_tree_window') and tw.Binary_tree_window and tw.Binary_tree_window.isVisible(): return tw.Binary_tree_window
+            if hasattr(tw,
+                       'Huffman_tree_window') and tw.Huffman_tree_window and tw.Huffman_tree_window.isVisible(): return tw.Huffman_tree_window
+
+        return None
+
+    # 【核心逻辑 2】本地执行 DSL，不走 AI
+    def execute_local_dsl(self, dsl_text):
+        """在本地执行 DSL 指令，不经过 AI"""
+        print(f"DEBUG: 检测到本地指令: {dsl_text}")  # 调试信息
+        viz = self.get_active_visualizer()
+
+        if not viz:
+            self.show_message("系统",
+                              "⚠️ 未检测到激活的可视化窗口。<br>请先在主界面打开具体的数据结构（如队列、栈），然后再输入指令。")
             return
-        self.qianwen_api = QianWenAPI(api_key)
-        self.send_btn.setEnabled(True)
-        self.api_key_input.clear()
-        self.show_message("系统", "API配置成功！现在可以开始提问了。")
+
+        try:
+            self.show_message("系统", f"正在本地执行指令: {dsl_text}")
+            handler = DSLHandler(viz)
+            # flag=0 表示启用动画
+            result = handler.execute_script(dsl_text, flag=0)
+
+            if result and result != "执行成功":
+                self.show_message("系统", f"执行结果: {result}")
+            else:
+                self.show_message("系统", "✅ 指令已执行")
+        except Exception as e:
+            traceback.print_exc()
+            self.show_message("系统", f"❌ 执行出错: {str(e)}")
 
     def send_question(self):
         question = self.question_input.text().strip()
         if not question: return
-        if not self.qianwen_api:
-            self.show_message("系统", "请先配置API Key")
-            return
+
         self.show_message("你", question)
         self.question_input.clear()
+
+        # === 优先检测是否为 DSL 指令 ===
+        # 如果是 ENQUEUE:8，这里会返回 True
+        if self.check_is_dsl(question):
+            self.execute_local_dsl(question)
+            return
+
+        # === 只有不是指令时，才发送给 AI ===
+        print(f"DEBUG: 未识别为指令，准备发送 AI: {question}")
+        if not self.qianwen_api:
+            self.show_message("系统", "API 初始化失败")
+            return
+
         self.send_btn.setEnabled(False)
         self.show_thinking_message()
+
         prompt = f"问题：{question}"
         self.ai_thread = AIAssistantThread(self.qianwen_api, prompt)
         self.ai_thread.response_received.connect(self.handle_ai_response)
         self.ai_thread.start()
 
     def show_thinking_message(self):
-        self.chat_display.append("<b>系统:</b> <i>燕小北正在思考中，请稍候...</i>")
-        self.chat_display.append("---")
+        self.chat_display.append("<div style='color: #757575; font-style: italic;'>燕小北正在思考...</div>")
         self.chat_display.verticalScrollBar().setValue(self.chat_display.verticalScrollBar().maximum())
 
     def handle_ai_response(self, response):
         self.show_message("燕小北", response)
         self.send_btn.setEnabled(True)
 
+        # 增强功能：如果 AI 返回的内容纯粹是 DSL 指令（例如用户让 AI 生成代码），也自动执行
+        if self.check_is_dsl(response):
+            self.show_message("系统", "检测到 AI 生成了 DSL 指令，正在自动执行...")
+            self.execute_local_dsl(response)
+
     def show_message(self, sender, message):
-        self.chat_display.append(f"<b>{sender}:</b> {message}")
-        self.chat_display.append("---")
+        color = "#1565c0" if sender == "燕小北" else "#2e7d32"
+        if sender == "系统": color = "#d32f2f"
+
+        formatted_msg = f"<div style='margin-bottom: 10px;'><b style='color: {color};'>{sender}:</b><br>{message}</div>"
+        self.chat_display.append(formatted_msg)
         self.chat_display.verticalScrollBar().setValue(self.chat_display.verticalScrollBar().maximum())
 
 
@@ -428,13 +511,15 @@ class AI_Floating_Window(QMainWindow):
         event.accept()
 
 
+
+
 class LinearStructureWindow(QMainWindow):
     def __init__(self, mainwindow):
         super().__init__()
         self.mainwindow = mainwindow
         self.init_sound_effects()
         self.setWindowTitle("线性结构可视化")
-        adjust_window_to_screen(self, 0.5, 0.8) # 宽度占屏幕50%，高度占80%
+        adjust_window_to_screen(self, 0.5, 0.8)  # 宽度占屏幕50%，高度占80%
         central_frame = QFrame()
         self.setCentralWidget(central_frame)
         self.set_background_image(central_frame, "./DataStructureVisualization/微信图片_20250922183759_13_117.jpg")
@@ -449,80 +534,64 @@ class LinearStructureWindow(QMainWindow):
         title_label.setStyleSheet("color: blue; text-shadow: 2px 2px 4px #000000;")
         main_layout.addWidget(title_label)
         main_layout.addStretch()
+
+        # 按钮布局
         button_layout1 = QHBoxLayout()
-        button_layout1.setSpacing(50)
+        button_layout1.setSpacing(30)
         button_layout1.setAlignment(Qt.AlignCenter)
+
         button_layout2 = QHBoxLayout()
         button_layout2.setSpacing(50)
         button_layout2.setAlignment(Qt.AlignCenter)
-        self.button_return = QPushButton("返回主界面")
-        self.button_return.setMinimumSize(150, 60)
-        self.button_return.setFont(QFont("SimHei", 12))
-        self.button_return.setStyleSheet("""
-                    QPushButton {
-                        background-color: rgba(60, 130, 255, 0.8);
-                        color: white;
-                        border-radius: 10px;
-                        border: none;
-                    }
-                    QPushButton:hover {
-                        background-color: rgba(60, 130, 255, 1.0);
-                        transform: scale(1.05);
-                    }
-                """)
-        self.button_return.clicked.connect(self.on_button_return_clicked)
-        button_layout2.addWidget(self.button_return)
-        self.button_stack = QPushButton("栈")
+
+        # 统一样式
+        btn_style = """
+            QPushButton {
+                background-color: rgba(60, 130, 255, 0.8);
+                color: white;
+                border-radius: 10px;
+                border: none;
+                font-family: SimHei;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: rgba(60, 130, 255, 1.0);
+                transform: scale(1.05);
+            }
+        """
+
+        self.button_stack = QPushButton("栈 (Stack)")
         self.button_stack.setMinimumSize(150, 60)
-        self.button_stack.setFont(QFont("SimHei", 12))
-        self.button_stack.setStyleSheet("""
-                    QPushButton {
-                        background-color: rgba(60, 130, 255, 0.8);
-                        color: white;
-                        border-radius: 10px;
-                        border: none;
-                    }
-                    QPushButton:hover {
-                        background-color: rgba(60, 130, 255, 1.0);
-                        transform: scale(1.05);
-                    }
-                """)
+        self.button_stack.setStyleSheet(btn_style)
         self.button_stack.clicked.connect(self.on_button_stack_clicked)
         button_layout1.addWidget(self.button_stack)
-        self.button_sequencelist = QPushButton("顺序表")
+
+        self.button_sequencelist = QPushButton("顺序表 (SeqList)")
         self.button_sequencelist.setMinimumSize(150, 60)
-        self.button_sequencelist.setFont(QFont("SimHei", 12))
-        self.button_sequencelist.setStyleSheet("""
-                            QPushButton {
-                                background-color: rgba(60, 130, 255, 0.8);
-                                color: white;
-                                border-radius: 10px;
-                                border: none;
-                            }
-                            QPushButton:hover {
-                                background-color: rgba(60, 130, 255, 1.0);
-                                transform: scale(1.05);
-                            }
-                        """)
+        self.button_sequencelist.setStyleSheet(btn_style)
         self.button_sequencelist.clicked.connect(self.on_button_sequencelist_clicked)
         button_layout1.addWidget(self.button_sequencelist)
-        self.button_linkedlist = QPushButton("链表")
+
+        self.button_linkedlist = QPushButton("链表 (LinkedList)")
         self.button_linkedlist.setMinimumSize(150, 60)
-        self.button_linkedlist.setFont(QFont("SimHei", 12))
-        self.button_linkedlist.setStyleSheet("""
-                                    QPushButton {
-                                        background-color: rgba(60, 130, 255, 0.8);
-                                        color: white;
-                                        border-radius: 10px;
-                                        border: none;
-                                    }
-                                    QPushButton:hover {
-                                        background-color: rgba(60, 130, 255, 1.0);
-                                        transform: scale(1.05);
-                                    }
-                                """)
+        self.button_linkedlist.setStyleSheet(btn_style)
         self.button_linkedlist.clicked.connect(self.on_button_linkedlist_clicked)
         button_layout1.addWidget(self.button_linkedlist)
+
+        # 新增：队列按钮
+        self.button_queue = QPushButton("队列 (Queue)")
+        self.button_queue.setMinimumSize(150, 60)
+        self.button_queue.setStyleSheet(btn_style)
+        self.button_queue.clicked.connect(self.on_button_queue_clicked)
+        button_layout1.addWidget(self.button_queue)
+
+        # 返回按钮
+        self.button_return = QPushButton("返回主界面")
+        self.button_return.setMinimumSize(150, 60)
+        self.button_return.setStyleSheet(btn_style)
+        self.button_return.clicked.connect(self.on_button_return_clicked)
+        button_layout2.addWidget(self.button_return)
+
         main_layout.addLayout(button_layout1)
         main_layout.addLayout(button_layout2)
         main_layout.addSpacing(80)
@@ -542,6 +611,10 @@ class LinearStructureWindow(QMainWindow):
     def on_button_linkedlist_clicked(self):
         self.play_click_sound()
         self.go_to_linkedlist()
+
+    def on_button_queue_clicked(self):
+        self.play_click_sound()
+        self.go_to_queue()
 
     def back_to_main(self):
         self.mainwindow.show()
@@ -570,6 +643,15 @@ class LinearStructureWindow(QMainWindow):
             self.hide()
         except Exception as e:
             QMessageBox.critical(self, "错误", f"出错: {e}")
+
+    def go_to_queue(self):
+        try:
+            self.queue_window = QueueVisualizer(self.mainwindow, self)
+            self.queue_window.show()
+            self.hide()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"出错: {e}")
+            print(e)
 
     def init_sound_effects(self):
         self.click_sound = QSoundEffect()

@@ -15,7 +15,7 @@ from PyQt5.QtMultimedia import QSoundEffect
 from DSL_handler import DSLHandler
 
 try:
-    from model import Stack, SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, HuffmanStructNode, \
+    from model import Stack, Queue,SequenceList, LinkedList, BinaryTree, BinarySearchTree, HuffmanTree, HuffmanStructNode, \
         AVLTree
 except ImportError:
     # 兼容没有 model.py 的运行环境，提供 SequenceList 桩代码
@@ -377,7 +377,6 @@ class VisualArea(QWidget):
         return 1 + max(self._get_tree_height(left, depth + 1),
                        self._get_tree_height(right, depth + 1))
 
-    # --- [核心修复] 绘图事件 (安全分发) ---
     def paintEvent(self, event):
         # 窗口太小时不绘图，防止计算错误
         if self.width() < 10 or self.height() < 10:
@@ -401,22 +400,25 @@ class VisualArea(QWidget):
                     self.draw_morph_frame(painter, state)
                 return
 
-                # --- 2. 线性结构 ---
-            if isinstance(self.data_structure, (Stack, SequenceList)):
+            # --- 2. 队列 (Queue) 独立绘制 ---
+            if isinstance(self.data_structure, Queue):
+                self._draw_queue(painter)
+
+            # --- 3. 线性结构 (Stack, SequenceList) ---
+            elif isinstance(self.data_structure, (Stack, SequenceList)):
                 self._draw_linear_structure(painter)
 
-            # --- 3. 链表 ---
+            # --- 4. 链表 ---
             elif isinstance(self.data_structure, LinkedList):
                 self._draw_linked_list(painter)
 
-            # --- 4. 哈夫曼树 ---
+            # --- 5. 哈夫曼树 ---
             elif isinstance(self.data_structure, list):
                 if len(self.data_structure) > 0 and isinstance(self.data_structure[0], HuffmanStructNode):
                     self._draw_huffman_array_process(painter)
 
-            # --- 5. 二叉树/BST/AVL (统一使用预计算布局) ---
+            # --- 6. 二叉树/BST/AVL ---
             elif hasattr(self.data_structure, 'root'):
-                # 即使是静态，也先计算位置，确保逻辑统一
                 self.node_positions = self.calculate_all_node_positions()
                 root = getattr(self.data_structure, 'root', None)
                 if root:
@@ -426,9 +428,7 @@ class VisualArea(QWidget):
                     self._draw_empty_tree_msg(painter)
 
         except Exception as e:
-            # 捕获所有绘图异常，防止程序直接崩溃
             print(f"Paint Error: {e}")
-            # traceback.print_exc()
 
         # 绘制浮动层
         anim_type = self.anim_state.get('type')
@@ -437,6 +437,180 @@ class VisualArea(QWidget):
 
         if self.traversal_text:
             self._draw_traversal_text(painter)
+
+    def _draw_queue(self, painter):
+        """
+        绘制队列：
+        1. 绘制上下平行的轨道线。
+        2. Head 标识固定在轨道左侧上方。
+        3. 元素在轨道内移动。
+        4. Tail 标识跟随最后一个元素。
+        """
+        ds = self.data_structure
+        length = ds.length()
+        area_width = self.width()
+        area_height = self.height()
+
+        # 尺寸定义
+        cell_w = self.cell_width
+        cell_h = self.cell_height
+        spacing = 5
+        unit_w = cell_w + spacing
+
+        state = self.anim_state
+        anim_type = state.get('type', '')
+        phase = state.get('phase', '')
+        progress = state.get('progress', 0.0)
+
+        # --- 计算布局 ---
+        # 包含即将入队的元素位置，保证轨道足够长
+        vis_length = length
+        if anim_type == 'queue_enqueue' and phase == 'move_in':
+            vis_length += 1
+
+        # 轨道最小宽度能容纳4个元素，保证美观
+        min_slots = max(vis_length, 4)
+        total_w = min_slots * unit_w
+
+        # 整体居中
+        start_x = (area_width - total_w) // 2
+        base_y = area_height // 2 - cell_h // 2
+
+        # --- 1. 绘制“上下两条线”轨道 ---
+        line_padding = 15  # 线比元素区域稍微长一点
+        track_start_x = start_x - line_padding
+        track_end_x = start_x + total_w + line_padding
+        track_top_y = base_y - 5
+        track_bottom_y = base_y + cell_h + 5
+
+        painter.save()
+        pen = QPen(QColor(55, 65, 81), 4)  # 深灰色粗线
+        pen.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen)
+
+        # 上轨道线
+        painter.drawLine(int(track_start_x), int(track_top_y), int(track_end_x), int(track_top_y))
+        # 下轨道线
+        painter.drawLine(int(track_start_x), int(track_bottom_y), int(track_end_x), int(track_bottom_y))
+
+        # --- Head 标识 (位置固定) ---
+        # 固定在轨道起始位置的左上方，不再随元素动
+        painter.setPen(QPen(QColor(220, 38, 38), 2))  # 红色
+        painter.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
+
+        head_label_x = track_start_x
+        head_label_y = track_top_y - 25
+
+        painter.drawText(int(head_label_x), int(head_label_y), 80, 20, Qt.AlignLeft, "Head 队头")
+
+        # 箭头：指向轨道左侧开口处（表示这是出口）
+        # 箭头起点在文字下方，终点在两线之间
+        arrow_top = QPointF(head_label_x + 20, head_label_y + 20)
+        arrow_bottom = QPointF(head_label_x + 20, base_y + cell_h / 2)  # 指向轨道中间高度
+
+        # 这里只画个短箭头指向轨道上方即可，太长会遮挡元素
+        arrow_end = QPointF(head_label_x + 20, track_top_y - 2)
+        painter.drawLine(arrow_top, arrow_end)
+        # 箭头尖
+        painter.drawLine(arrow_end, QPointF(head_label_x + 15, track_top_y - 8))
+        painter.drawLine(arrow_end, QPointF(head_label_x + 25, track_top_y - 8))
+
+        painter.restore()
+
+        # --- 2. 绘制队列中的现有元素 ---
+        for i in range(length):
+            painter.save()
+
+            # 基础位置
+            curr_x = start_x + i * unit_w
+            curr_y = base_y
+
+            bg_color = QColor(219, 234, 254)
+            border_color = QColor(30, 58, 138)
+            opacity = 1.0
+
+            # 动画逻辑
+            if anim_type == 'queue_dequeue':
+                if phase == 'flash_head' or phase == 'move_out':
+                    if i == 0:  # 队头
+                        if phase == 'flash_head':
+                            tick = state.get('flash_count', 0)
+                            if (tick // 5) % 2 == 0:
+                                bg_color = QColor(252, 165, 165)
+                            else:
+                                bg_color = QColor(253, 224, 71)
+                        elif phase == 'move_out':
+                            move_dist = unit_w * 1.5 * progress
+                            curr_x -= move_dist
+                            opacity = 1.0 - progress
+
+                elif phase == 'shift_forward':
+                    # 视觉补间：从右边滑过来
+                    offset = unit_w * (1.0 - progress)
+                    curr_x += offset
+
+            # 绘制
+            if opacity > 0.05:
+                painter.setOpacity(opacity)
+                painter.setBrush(QBrush(bg_color))
+                painter.setPen(QPen(border_color, 2))
+                painter.drawRect(self._safe_rect(curr_x, curr_y, cell_w, cell_h))
+
+                painter.setPen(QPen(QColor(17, 24, 39), 1))
+                painter.setFont(QFont("Arial", 12, QFont.Bold))
+                val = str(ds.get(i))
+                painter.drawText(self._safe_rect(curr_x, curr_y, cell_w, cell_h), Qt.AlignCenter, val)
+
+            painter.restore()
+
+        # --- 3. 绘制正在入队的 Ghost Element ---
+        vis_tail_x = -1
+
+        if anim_type == 'queue_enqueue' and phase == 'move_in':
+            painter.save()
+            new_val = state.get('new_val')
+
+            dest_x = start_x + length * unit_w
+            src_x = dest_x + unit_w * 3  # 从右边飞入
+
+            curr_x = lerp(src_x, dest_x, progress)
+            vis_tail_x = curr_x  # 队尾标记跟随它
+
+            painter.setBrush(QBrush(QColor(16, 185, 129)))
+            painter.setPen(QPen(QColor(6, 78, 59), 2))
+            painter.drawRect(self._safe_rect(curr_x, base_y, cell_w, cell_h))
+
+            painter.setPen(QPen(Qt.white))
+            painter.setFont(QFont("Arial", 12, QFont.Bold))
+            painter.drawText(self._safe_rect(curr_x, base_y, cell_w, cell_h), Qt.AlignCenter, str(new_val))
+            painter.restore()
+        else:
+            # 正常情况下的队尾位置
+            if length > 0:
+                last_idx = length - 1
+                vis_tail_x = start_x + last_idx * unit_w
+                # 如果正在前移，Tail 也要跟着移动
+                if anim_type == 'queue_dequeue' and phase == 'shift_forward':
+                    vis_tail_x += unit_w * (1.0 - progress)
+
+        # --- 4. 绘制 Tail 标识 ---
+        if vis_tail_x != -1:
+            painter.save()
+            painter.setPen(QPen(QColor(5, 150, 105), 2))  # 绿色
+            painter.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
+
+            # 显示在元素右上角
+            tail_lbl_x = vis_tail_x + cell_w - 5
+            tail_lbl_y = track_top_y - 25
+
+            painter.drawText(int(tail_lbl_x), int(tail_lbl_y), 80, 20, Qt.AlignLeft, "Tail 队尾")
+
+            # 箭头指向元素右边线
+            p_start = QPointF(tail_lbl_x + 10, tail_lbl_y + 20)
+            p_end = QPointF(vis_tail_x + cell_w, base_y + 5)
+            painter.drawLine(p_start, p_end)
+
+            painter.restore()
 
     # === [新功能] 统一树形结构绘制逻辑 ===
     def _draw_tree_recursive(self, painter, node):
@@ -1419,7 +1593,7 @@ class BaseVisualizer(QWidget):
 
         # 1. 智能判别：如果包含中文，或者不是以标准 DSL 关键字开头，就认为是 AI 请求
         has_chinese = any('\u4e00' <= char <= '\u9fff' for char in script)
-        is_standard_dsl = any(script.upper().startswith(cmd) for cmd in ['BUILD', 'INSERT', 'DELETE', 'REMOVE'])
+        is_standard_dsl = any(script.upper().startswith(cmd) for cmd in ['BUILD', 'INSERT', 'DELETE', 'REMOVE','DEQUEUE','ENQUEUE'])
 
         if has_chinese or (not is_standard_dsl and len(script) > 0):
             print("检测到自然语言，调用 AI 处理...")
@@ -1462,6 +1636,8 @@ class BaseVisualizer(QWidget):
             specific_rules = "\n规则(BinaryTree):\n- BUILD: root, n1...\n- INSERT: p_idx, val, L/R"
         elif stype == "HuffmanTree":
             specific_rules = "\n规则(Huffman):\n- BUILD: A:10, B:20..."
+        elif stype == "Queue":
+            specific_rules = "\n规则(Queue):\n- BUILD: v1, v2...\n- ENQUEUE: val\n- DEQUEUE: (无参)"
         else:
             specific_rules = f"\n当前结构({stype})，请使用通用指令。"
 
@@ -1655,6 +1831,215 @@ class StackVisualizer(BaseVisualizer):
 
     def _update_status_text(self):
         self.status_label.setText(f"当前栈深: {self.data_structure.length()}")
+
+
+class QueueVisualizer(BaseVisualizer):
+    def __init__(self, main_window=None, lastwindow=None):
+        super().__init__(main_window, lastwindow, "队列 (Queue) 可视化工具")
+        # 确保 Queue 已在 model.py 中定义
+        self.data_structure = Queue()
+        self.visual_area.set_data_structure(self.data_structure)
+        self.anim_timer = QTimer()
+        self.anim_timer.timeout.connect(self.update_animation)
+
+    def _create_input_layout(self):
+        l = QHBoxLayout()
+        # 增加提示
+        l.addWidget(QLabel("元素值:"))
+
+        self.enqueue_input = QLineEdit()
+        self.enqueue_input.setStyleSheet(STYLES["input"])
+        self.enqueue_input.setPlaceholderText("请输入数字")
+        self.enqueue_input.returnPressed.connect(self.handle_enqueue)  # 回车触发
+
+        btn = QPushButton("入队 (Enqueue)")
+        btn.setStyleSheet(STYLES["btn_success"])
+        btn.clicked.connect(self.handle_enqueue)
+
+        l.addWidget(self.enqueue_input)
+        l.addWidget(btn)
+        return l
+
+    def _create_button_layout(self):
+        l = QHBoxLayout()
+        l.setSpacing(15)
+
+        # 出队按钮 - 无需输入框
+        b1 = QPushButton("出队 (Dequeue)")
+        b1.clicked.connect(self.handle_dequeue)
+        b1.setStyleSheet(STYLES["btn_warning"])
+
+        b2 = QPushButton("随机生成")
+        b2.clicked.connect(self.random_build)
+        b2.setStyleSheet(STYLES["btn_random"])
+
+        b3 = QPushButton("清空")
+        b3.clicked.connect(self.handle_clear)
+        b3.setStyleSheet(STYLES["btn_danger"])
+
+        l.addWidget(b1)
+        l.addWidget(b2)
+        l.addWidget(b3)
+        return l
+
+    def handle_enqueue(self):
+        # 1. 严格校验输入：必须是数字
+        text = self.enqueue_input.text().strip()
+        if not text:
+            QMessageBox.warning(self, "输入错误", "入队值不能为空！")
+            return
+
+        # 尝试转为数字，如果失败则报错
+        try:
+            float(text)  # 支持整数或浮点数
+        except ValueError:
+            QMessageBox.warning(self, "输入错误", "请输入有效的数值！")
+            self.enqueue_input.selectAll()  # 选中错误文本方便修改
+            return
+
+        # 2. 动画逻辑
+        if self.anim_enabled:
+            # 启动入队动画：先不插入数据，只播放动画
+            target_idx = self.data_structure.length()
+            self.visual_area.anim_state = {
+                'type': 'queue_enqueue',
+                'target_idx': target_idx,
+                'new_val': text,
+                'phase': 'move_in',
+                'progress': 0.0
+            }
+            # 速度适中
+            self.anim_timer.setInterval(30)
+            self.anim_timer.start()
+            self.status_label.setText(f"元素 {text} 正在入队...")
+            self.enqueue_input.clear()
+        else:
+            # 无动画模式
+            self.data_structure.enqueue(text)
+            self.enqueue_input.clear()
+            self.update_display()
+            self.status_label.setText(f"已入队: {text}")
+
+    def handle_dequeue(self):
+        try:
+            if self.data_structure.is_empty():
+                QMessageBox.warning(self, "操作无效", "队列已空，无法出队！")
+                return
+
+            # 出队无需输入值，直接操作队头
+            if self.anim_enabled:
+                # 启动出队动画序列
+                self.visual_area.anim_state = {
+                    'type': 'queue_dequeue',
+                    'phase': 'flash_head',  # 第一阶段：队头闪烁
+                    'progress': 0.0,
+                    'flash_count': 0,  # 计数器
+                    'target_idx': 0
+                }
+                # 设置定时器，闪烁需要持续约2秒
+                # 50ms * 40次 = 2000ms
+                self.anim_timer.setInterval(50)
+                self.anim_timer.start()
+                val = self.data_structure.peek()
+                self.status_label.setText(f"队头元素 {val} 准备出队...")
+            else:
+                val = self.data_structure.dequeue()
+                self.update_display()
+                self.status_label.setText(f"已出队: {val}")
+
+        except Exception as e:
+            QMessageBox.warning(self, "错误", str(e))
+
+    def update_animation(self):
+        state = self.visual_area.anim_state
+        if not state:
+            self.anim_timer.stop()
+            return
+
+        if not self.anim_enabled:
+            self.anim_timer.stop()
+            self.visual_area.anim_state = {}
+            self.update_display()
+            return
+
+        anim_type = state['type']
+
+        # === 入队动画 ===
+        if anim_type == 'queue_enqueue':
+            if state['phase'] == 'move_in':
+                # 进场速度
+                state['progress'] += 0.05
+                if state['progress'] >= 1.0:
+                    # 动画结束，实际插入数据
+                    self.anim_timer.stop()
+                    self.data_structure.enqueue(state['new_val'])
+                    self.visual_area.anim_state = {}
+                    self.update_display()
+                    self.status_label.setText(f"入队完成, 当前长度: {self.data_structure.length()}")
+
+        # === 出队动画 ===
+        elif anim_type == 'queue_dequeue':
+            # 阶段 1: 队头闪烁 (持续 2 秒)
+            if state['phase'] == 'flash_head':
+                state['flash_count'] += 1
+                # 50ms * 40 = 2000ms
+                if state['flash_count'] >= 40:
+                    # 切换到移出阶段
+                    state['phase'] = 'move_out'
+                    state['progress'] = 0.0
+                    self.anim_timer.setInterval(30)  # 加速移动
+                    self.status_label.setText("队头元素移出中...")
+                else:
+                    self.update_display()  # 刷新颜色
+                    return
+
+                    # 阶段 2: 队头向左移出并消失
+            elif state['phase'] == 'move_out':
+                state['progress'] += 0.05
+                if state['progress'] >= 1.0:
+                    # 移出动画完成，此时才进行【物理删除】
+                    removed = self.data_structure.dequeue()
+
+                    if self.data_structure.length() > 0:
+                        # 阶段 3: 如果还有元素，剩下的整体前移
+                        # 此时 data_structure 已经是删除后的状态 (下标0是原来的下标1)
+                        # 但绘图函数会通过 offset 让它们看起来还在原位，准备滑过来
+                        state['phase'] = 'shift_forward'
+                        state['progress'] = 0.0
+                        self.status_label.setText("队列前移整队...")
+                    else:
+                        # 队列空了，直接结束
+                        self.anim_timer.stop()
+                        self.visual_area.anim_state = {}
+                        self.update_display()
+                        self.status_label.setText(f"出队完成: {removed}")
+                        return
+
+            # 阶段 3: 剩余元素前移填补空缺
+            elif state['phase'] == 'shift_forward':
+                state['progress'] += 0.08  # 移动稍快
+                if state['progress'] >= 1.0:
+                    self.anim_timer.stop()
+                    self.visual_area.anim_state = {}
+                    self.update_display()
+                    self.status_label.setText("出队及整理完成")
+
+        self.update_display()
+
+    def handle_clear(self):
+        self.data_structure.clear()
+        self.update_display()
+        self.status_label.setText("队列已清空")
+
+    def random_build(self):
+        self.data_structure.clear()
+        # 随机生成 5-10 个 1-100 的数字
+        [self.data_structure.enqueue(random.randint(1, 100)) for _ in range(random.randint(5, 10))]
+        self.update_display()
+        self.status_label.setText("已随机生成队列")
+
+    def _update_status_text(self):
+        self.status_label.setText(f"当前队列长度: {self.data_structure.length()}")
 
 
 class SequenceListVisualizer(BaseVisualizer):
